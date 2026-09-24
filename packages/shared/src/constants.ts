@@ -1,0 +1,14 @@
+/** 业务错误码（见 docs/03 技术选型与接口清单） */
+export const ErrorCode = {
+  SUCCESS: 0,
+  PARAM_INVALID: 10001,
+  UNAUTHORIZED: 10002,
+  FORBIDDEN: 10003,
+  NOT_FOUND: 10004,
+  BAD_CREDENTIALS: 10005,
+  PHONE_REGISTERED: 10006,
+  OUT_OF_STOCK: 10007,
+  ORDER_STATE_INVALID: 10008,
+} as const;
+
+export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
