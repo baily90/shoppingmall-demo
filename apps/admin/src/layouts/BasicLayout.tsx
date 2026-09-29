@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
 import { Avatar, Dropdown, Layout, Menu, Space, Typography } from 'antd';
 import type { MenuProps } from 'antd';
@@ -31,13 +31,45 @@ function toMenuItems(menus: MenuNode[]): NonNullable<MenuProps['items']> {
   });
 }
 
+/** 返回 pathname 在菜单树中的所有祖先 key（不含自身），用于默认展开所属父级 */
+function getAncestorKeys(
+  menus: MenuNode[],
+  pathname: string,
+  parents: string[] = [],
+): string[] | null {
+  for (const m of menus) {
+    const key = m.path ?? m.code;
+    if (key === pathname) return parents;
+    if (m.children?.length) {
+      const found = getAncestorKeys(m.children, pathname, [...parents, key]);
+      if (found !== null) return found;
+    }
+  }
+  return null;
+}
+
 export default function BasicLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
 
-  const menuItems = user?.menus ? toMenuItems(user.menus) : [];
+  const menus = useMemo(() => user?.menus ?? [], [user?.menus]);
+  const menuItems = useMemo(() => toMenuItems(menus), [menus]);
+
+  // 默认展开当前路由所属的父级
+  const [openKeys, setOpenKeys] = useState<string[]>(
+    () => getAncestorKeys(menus, location.pathname) ?? [],
+  );
+
+  useEffect(() => {
+    setOpenKeys(getAncestorKeys(menus, location.pathname) ?? []);
+  }, [location.pathname, menus]);
+
+  // 手风琴：同一时间只展开一个父级
+  const onOpenChange: MenuProps['onOpenChange'] = (keys) => {
+    setOpenKeys(keys.length ? [keys[keys.length - 1]] : []);
+  };
 
   const onMenuClick: MenuProps['onClick'] = ({ key }) => {
     navigate(key);
@@ -68,6 +100,8 @@ export default function BasicLayout() {
           theme="dark"
           mode="inline"
           selectedKeys={[location.pathname]}
+          openKeys={collapsed ? [] : openKeys}
+          onOpenChange={onOpenChange}
           items={menuItems}
           onClick={onMenuClick}
         />

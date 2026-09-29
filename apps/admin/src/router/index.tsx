@@ -7,6 +7,9 @@ import Dashboard from '../pages/dashboard';
 import UserList from '../pages/system/user';
 import RoleList from '../pages/system/role';
 import PermissionList from '../pages/system/permission';
+import CategoryList from '../pages/product/category';
+import BrandList from '../pages/product/brand';
+import ProductList from '../pages/product/product';
 import Forbidden from '../pages/403';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -55,6 +58,30 @@ export const router = createBrowserRouter([
         element: (
           <WithPermission permission="permission:list">
             <PermissionList />
+          </WithPermission>
+        ),
+      },
+      {
+        path: 'product/category',
+        element: (
+          <WithPermission permission="category:list">
+            <CategoryList />
+          </WithPermission>
+        ),
+      },
+      {
+        path: 'product/brand',
+        element: (
+          <WithPermission permission="brand:list">
+            <BrandList />
+          </WithPermission>
+        ),
+      },
+      {
+        path: 'product/product',
+        element: (
+          <WithPermission permission="product:list">
+            <ProductList />
           </WithPermission>
         ),
       },
