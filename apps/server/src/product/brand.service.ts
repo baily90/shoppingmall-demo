@@ -10,13 +10,14 @@ import { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 export class BrandService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(query: PageQueryDto) {
+  async list(query: PageQueryDto, onlyEnabled = false) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const keyword = query.keyword?.trim();
     const where: Prisma.BrandWhereInput = {
       deletedAt: null,
       ...(keyword ? { name: { contains: keyword, mode: 'insensitive' } } : {}),
+      ...(onlyEnabled ? { status: 1 } : {}),
     };
 
     const [list, total] = await Promise.all([

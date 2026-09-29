@@ -44,9 +44,63 @@ export class ProductService {
     return { list, total, page, pageSize };
   }
 
-  async detail(id: number) {
+  /** 商城端商品列表：只出上架商品，附最低价（最便宜的在售 SKU 价，单位分） */
+  async listOnSale(query: ListProductDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    const keyword = query.keyword?.trim();
+    const where: Prisma.ProductWhereInput = {
+      deletedAt: null,
+      status: 1,
+      ...(keyword ? { name: { contains: keyword, mode: 'insensitive' } } : {}),
+      ...(query.categoryId !== undefined ? { categoryId: query.categoryId } : {}),
+      ...(query.brandId !== undefined ? { brandId: query.brandId } : {}),
+    };
+
+    const [list, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          subTitle: true,
+          mainImage: true,
+          skus: {
+            where: { status: 1 },
+            orderBy: { price: 'asc' },
+            take: 1,
+            select: { price: true, originalPrice: true },
+          },
+        },
+        orderBy: [{ sort: 'asc' }, { id: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    return {
+      list: list.map((p) => ({
+        id: p.id,
+        name: p.name,
+        subTitle: p.subTitle,
+        mainImage: p.mainImage,
+        price: p.skus[0]?.price ?? null,
+        originalPrice: p.skus[0]?.originalPrice ?? null,
+      })),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  async detail(id: number, onlyOnSale = false) {
     await this.ensureProduct(id);
-    return this.getDetail(id);
+    const detail = await this.getDetail(id);
+    if (onlyOnSale && detail.status !== 1) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '商品不存在或已下架');
+    }
+    return detail;
   }
 
   async create(dto: CreateProductDto) {

@@ -22,10 +22,10 @@ export interface CategoryNode {
 export class CategoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 分类树（未删除的） */
-  async getTree(): Promise<CategoryNode[]> {
+  /** 分类树（未删除的；onlyEnabled 时只返回启用分类） */
+  async getTree(onlyEnabled = false): Promise<CategoryNode[]> {
     const list = await this.prisma.category.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...(onlyEnabled ? { status: 1 } : {}) },
       orderBy: [{ sort: 'asc' }, { id: 'asc' }],
     });
     return this.buildTree(list);
