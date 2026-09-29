@@ -1,0 +1,243 @@
+import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import { ErrorCode } from '@mall/shared';
+import { PrismaService } from '../prisma/prisma.service';
+import { BusinessException } from '../common/exceptions/business.exception';
+import {
+  CreateProductDto,
+  ListProductDto,
+  UpdateProductDto,
+  UpdateSkuDto,
+} from './dto/product.dto';
+
+@Injectable()
+export class ProductService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async list(query: ListProductDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    const keyword = query.keyword?.trim();
+    const where: Prisma.ProductWhereInput = {
+      deletedAt: null,
+      ...(keyword ? { name: { contains: keyword, mode: 'insensitive' } } : {}),
+      ...(query.categoryId !== undefined ? { categoryId: query.categoryId } : {}),
+      ...(query.brandId !== undefined ? { brandId: query.brandId } : {}),
+      ...(query.status !== undefined ? { status: query.status } : {}),
+    };
+
+    const [list, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: {
+          category: { select: { id: true, name: true } },
+          brand: { select: { id: true, name: true } },
+          _count: { select: { skus: true } },
+        },
+        orderBy: [{ sort: 'asc' }, { id: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    return { list, total, page, pageSize };
+  }
+
+  async detail(id: number) {
+    await this.ensureProduct(id);
+    return this.getDetail(id);
+  }
+
+  async create(dto: CreateProductDto) {
+    await this.ensureCategory(dto.categoryId);
+    await this.ensureBrand(dto.brandId);
+
+    const productId = await this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: {
+          name: dto.name,
+          subTitle: dto.subTitle ?? null,
+          categoryId: dto.categoryId,
+          brandId: dto.brandId,
+          mainImage: dto.mainImage,
+          detail: dto.detail ?? null,
+          status: dto.status ?? 1,
+          sort: dto.sort ?? 0,
+          images: dto.images?.length
+            ? { create: dto.images.map((url, i) => ({ url, sort: i })) }
+            : undefined,
+        },
+      });
+
+      // 1) 落规格组 + 规格值，收集每组的值对象数组
+      const groupValues: { id: number }[][] = [];
+      for (const [gi, g] of (dto.specGroups ?? []).entries()) {
+        const group = await tx.productSpecGroup.create({
+          data: { productId: product.id, name: g.name, sort: gi },
+        });
+        const values: { id: number }[] = [];
+        for (const [vi, v] of g.values.entries()) {
+          values.push(
+            await tx.productSpecValue.create({
+              data: { groupId: group.id, value: v, sort: vi },
+            }),
+          );
+        }
+        groupValues.push(values);
+      }
+
+      // 2) 笛卡尔积生成 SKU 组合：颜色[红,蓝] × 容量[128G,256G] → 4 个 SKU
+      //    无规格时 cartesian 返回 [[]]，即生成一个不带规格的默认 SKU
+      const combos = this.cartesian(groupValues);
+      for (const combo of combos) {
+        await tx.productSku.create({
+          data: {
+            productId: product.id,
+            price: 0,
+            stock: 0,
+            specValues: combo.length
+              ? { create: combo.map((sv) => ({ specValueId: sv.id })) }
+              : undefined,
+          },
+        });
+      }
+
+      return product.id;
+    });
+
+    return this.getDetail(productId);
+  }
+
+  async update(id: number, dto: UpdateProductDto) {
+    await this.ensureProduct(id);
+    if (dto.categoryId !== undefined) await this.ensureCategory(dto.categoryId);
+    if (dto.brandId !== undefined) await this.ensureBrand(dto.brandId);
+
+    const data: Prisma.ProductUpdateInput = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.subTitle !== undefined) data.subTitle = dto.subTitle;
+    if (dto.categoryId !== undefined) data.category = { connect: { id: dto.categoryId } };
+    if (dto.brandId !== undefined) data.brand = { connect: { id: dto.brandId } };
+    if (dto.mainImage !== undefined) data.mainImage = dto.mainImage;
+    if (dto.detail !== undefined) data.detail = dto.detail;
+    if (dto.status !== undefined) data.status = dto.status;
+    if (dto.sort !== undefined) data.sort = dto.sort;
+    // 轮播图：先删后建（数量少，简单可靠）
+    if (dto.images !== undefined) {
+      data.images = {
+        deleteMany: {},
+        create: dto.images.map((url, i) => ({ url, sort: i })),
+      };
+    }
+
+    await this.prisma.product.update({ where: { id }, data });
+    return { id };
+  }
+
+  async remove(id: number) {
+    await this.ensureProduct(id);
+    // 软删除：保留订单/购物车的历史关联
+    await this.prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
+    return null;
+  }
+
+  async updateSku(skuId: number, dto: UpdateSkuDto) {
+    await this.ensureSku(skuId);
+    const data: Prisma.ProductSkuUpdateInput = {};
+    if (dto.price !== undefined) data.price = dto.price;
+    if (dto.originalPrice !== undefined) data.originalPrice = dto.originalPrice;
+    if (dto.stock !== undefined) data.stock = dto.stock;
+    if (dto.skuCode !== undefined) data.skuCode = dto.skuCode;
+    if (dto.image !== undefined) data.image = dto.image;
+    if (dto.status !== undefined) data.status = dto.status;
+    return this.prisma.productSku.update({
+      where: { id: skuId },
+      data,
+      select: { id: true, price: true, stock: true },
+    });
+  }
+
+  /** 商品完整详情：分类/品牌 + 轮播图 + 规格组→值 + SKU（含规格组合） */
+  private async getDetail(productId: number) {
+    const product = await this.prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+      include: {
+        category: { select: { id: true, name: true } },
+        brand: { select: { id: true, name: true } },
+        images: { orderBy: { sort: 'asc' } },
+        specGroups: {
+          orderBy: { sort: 'asc' },
+          include: { values: { orderBy: { sort: 'asc' } } },
+        },
+        skus: {
+          orderBy: { id: 'asc' },
+          include: {
+            specValues: {
+              include: {
+                specValue: { include: { group: { select: { id: true, name: true } } } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      ...product,
+      skus: product.skus.map((sku) => ({
+        id: sku.id,
+        price: sku.price,
+        originalPrice: sku.originalPrice,
+        stock: sku.stock,
+        skuCode: sku.skuCode,
+        image: sku.image,
+        status: sku.status,
+        // 规格组合扁平化：颜色=红、容量=128G
+        specValues: sku.specValues.map((sv) => ({
+          id: sv.specValue.id,
+          value: sv.specValue.value,
+          groupId: sv.specValue.group.id,
+          groupName: sv.specValue.group.name,
+        })),
+      })),
+    };
+  }
+
+  /** 笛卡尔积：[[a,b],[1,2]] → [[a,1],[a,2],[b,1],[b,2]]；空数组 → [[]] */
+  private cartesian<T>(arrays: T[][]): T[][] {
+    return arrays.reduce<T[][]>((acc, cur) => acc.flatMap((a) => cur.map((c) => [...a, c])), [[]]);
+  }
+
+  private async ensureProduct(id: number) {
+    const found = await this.prisma.product.findUnique({ where: { id } });
+    if (!found || found.deletedAt) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '商品不存在');
+    }
+    return found;
+  }
+
+  private async ensureCategory(id: number) {
+    const found = await this.prisma.category.findUnique({ where: { id } });
+    if (!found || found.deletedAt) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '分类不存在');
+    }
+    return found;
+  }
+
+  private async ensureBrand(id: number) {
+    const found = await this.prisma.brand.findUnique({ where: { id } });
+    if (!found || found.deletedAt) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '品牌不存在');
+    }
+    return found;
+  }
+
+  private async ensureSku(id: number) {
+    const found = await this.prisma.productSku.findUnique({ where: { id } });
+    if (!found) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, 'SKU 不存在');
+    }
+    return found;
+  }
+}
