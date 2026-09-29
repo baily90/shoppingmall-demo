@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
-/** 分页 + 关键字查询参数（用于列表接口） */
+/** 分页 + 关键字查询参数（通用列表接口） */
 export class PageQueryDto {
   @Type(() => Number)
   @IsInt({ message: 'page 必须为整数' })

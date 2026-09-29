@@ -126,7 +126,7 @@ model UserAddress {
 
 model Category {
   id        Int       @id @default(autoincrement())
-  parentId  Int       @default(0) @map("parent_id")
+  parentId  Int?      @map("parent_id")
   name      String
   level     Int       @default(1)
   sort      Int       @default(0)

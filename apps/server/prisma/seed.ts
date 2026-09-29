@@ -66,6 +66,55 @@ const permissionDefs: PermDef[] = [
       },
     ],
   },
+  {
+    code: 'product',
+    name: '商品管理',
+    type: 1,
+    path: '/product',
+    icon: 'ShoppingOutlined',
+    sort: 2,
+    children: [
+      {
+        code: 'category:list',
+        name: '分类管理',
+        type: 2,
+        path: '/product/category',
+        icon: 'AppstoreOutlined',
+        sort: 1,
+        children: [
+          { code: 'category:create', name: '新增分类', type: 3, sort: 1 },
+          { code: 'category:update', name: '编辑分类', type: 3, sort: 2 },
+          { code: 'category:delete', name: '删除分类', type: 3, sort: 3 },
+        ],
+      },
+      {
+        code: 'brand:list',
+        name: '品牌管理',
+        type: 2,
+        path: '/product/brand',
+        icon: 'TagsOutlined',
+        sort: 2,
+        children: [
+          { code: 'brand:create', name: '新增品牌', type: 3, sort: 1 },
+          { code: 'brand:update', name: '编辑品牌', type: 3, sort: 2 },
+          { code: 'brand:delete', name: '删除品牌', type: 3, sort: 3 },
+        ],
+      },
+      {
+        code: 'product:list',
+        name: '商品管理',
+        type: 2,
+        path: '/product/product',
+        icon: 'ShoppingCartOutlined',
+        sort: 3,
+        children: [
+          { code: 'product:create', name: '新增商品', type: 3, sort: 1 },
+          { code: 'product:update', name: '编辑商品', type: 3, sort: 2 },
+          { code: 'product:delete', name: '删除商品', type: 3, sort: 3 },
+        ],
+      },
+    ],
+  },
 ];
 
 async function createPermission(

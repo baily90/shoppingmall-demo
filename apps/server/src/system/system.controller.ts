@@ -20,7 +20,7 @@ import { SystemService } from './system.service';
 import { AssignRolesDto, CreateAdminDto, UpdateAdminDto } from './dto/admin.dto';
 import { AssignPermissionsDto, CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { CreatePermissionDto, UpdatePermissionDto } from './dto/permission.dto';
-import { PageQueryDto } from './dto/query.dto';
+import { PageQueryDto } from '../common/dto/query.dto';
 
 @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
 @Controller('admin')
