@@ -7,6 +7,7 @@ import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './auth/auth.module';
 import { SystemModule } from './system/system.module';
 import { ProductModule } from './product/product.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ProductModule } from './product/product.module';
     AuthModule,
     SystemModule,
     ProductModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService],
