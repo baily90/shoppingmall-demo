@@ -13,6 +13,7 @@
     "dev:h5": "pnpm --filter h5 dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
+    "setup": "bash scripts/setup.sh",
     "format": "prettier --write .",
     "prepare": "husky"
   },
