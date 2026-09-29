@@ -9,6 +9,8 @@ export const ErrorCode = {
   PHONE_REGISTERED: 10006,
   OUT_OF_STOCK: 10007,
   ORDER_STATE_INVALID: 10008,
+  EXISTS: 10009,
+  NOT_ALLOWED: 10010,
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
