@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Button, Input, NavBar, Toast } from 'antd-mobile';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 import { getErrorMessage } from '../api/request';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, register } = useAuth();
+  // 登录前的目标路由（由 RequireAuth / 详情页跳转时携带）
+  const from = (location.state as { from?: string } | null)?.from;
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +33,7 @@ export default function Login() {
         await register(phone, password, nickname || undefined);
       }
       Toast.show({ content: mode === 'login' ? '登录成功' : '注册成功', icon: 'success' });
-      navigate(-1);
+      navigate(from ?? '/', { replace: true });
     } catch (e) {
       Toast.show({ content: getErrorMessage(e), icon: 'fail' });
     } finally {

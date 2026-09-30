@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
-import { Avatar, Dropdown, Layout, Menu, Space, Typography } from 'antd';
+import { App, Avatar, Dropdown, Layout, Menu, Space, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import * as Icons from '@ant-design/icons';
@@ -50,6 +50,7 @@ function getAncestorKeys(
 
 export default function BasicLayout() {
   const { user, logout } = useAuth();
+  const { modal } = App.useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
@@ -75,9 +76,14 @@ export default function BasicLayout() {
     navigate(key);
   };
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
+  const handleLogout = () => {
+    modal.confirm({
+      title: '确认退出登录？',
+      onOk: async () => {
+        await logout();
+        navigate('/login');
+      },
+    });
   };
 
   return (

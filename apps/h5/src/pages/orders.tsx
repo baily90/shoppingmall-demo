@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavBar, Tabs, Toast } from 'antd-mobile';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { listOrders, ORDER_STATUS_TEXT } from '../api/trade';
 import type { OrderSummary } from '../api/trade';
 import { getErrorMessage } from '../api/request';
@@ -17,7 +17,9 @@ const TABS = [
 
 export default function Orders() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState('all');
+  const [searchParams] = useSearchParams();
+  // 支持从「我的」页角标入口进来时定位到对应状态 tab
+  const [tab, setTab] = useState(searchParams.get('status') ?? 'all');
   const [list, setList] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(false);
 

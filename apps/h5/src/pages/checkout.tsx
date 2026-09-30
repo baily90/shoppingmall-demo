@@ -5,6 +5,7 @@ import { createOrder, listAddresses } from '../api/trade';
 import type { Address } from '../api/trade';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
+import { useCartCount } from '../store/cart';
 
 interface CheckoutItem {
   skuId: number;
@@ -18,6 +19,7 @@ interface CheckoutItem {
 export default function Checkout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { refresh } = useCartCount();
   const items = (location.state?.items as CheckoutItem[]) ?? [];
 
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -58,6 +60,7 @@ export default function Checkout() {
       });
       Toast.show({ content: '下单成功', icon: 'success' });
       navigate(`/order/${res.data.data.id}`, { replace: true });
+      refresh();
     } catch (e) {
       Toast.show({ content: getErrorMessage(e), icon: 'fail' });
     } finally {

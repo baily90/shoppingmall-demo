@@ -207,6 +207,19 @@ export class OrderService {
     };
   }
 
+  /** 各状态订单数（用于「我的」页角标） */
+  async counts(userId: number) {
+    const rows = await this.prisma.order.groupBy({
+      by: ['status'],
+      where: { userId },
+      _count: { status: true },
+    });
+    const statusCounts: Record<string, number> = {};
+    for (const r of rows) statusCounts[String(r.status)] = r._count.status;
+    const total = rows.reduce((sum, r) => sum + r._count.status, 0);
+    return { total, statusCounts };
+  }
+
   async detail(userId: number, orderId: number) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },

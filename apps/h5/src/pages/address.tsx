@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Dialog, NavBar, Toast } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
-import { deleteAddress, listAddresses } from '../api/trade';
+import { deleteAddress, listAddresses, updateAddress } from '../api/trade';
 import type { Address } from '../api/trade';
 import { getErrorMessage } from '../api/request';
 
@@ -39,6 +39,17 @@ export default function AddressList() {
     });
   };
 
+  const setDefault = async (a: Address) => {
+    try {
+      await updateAddress(a.id, { isDefault: 1 });
+      // 本地更新：只把默认标志挪到新地址，不重新拉列表（避免默认地址瞬间跳位，像 bug）
+      setList((prev) => prev.map((item) => ({ ...item, isDefault: item.id === a.id ? 1 : 0 })));
+      Toast.show({ content: '已设为默认', icon: 'success' });
+    } catch (e) {
+      Toast.show({ content: getErrorMessage(e), icon: 'fail' });
+    }
+  };
+
   return (
     <div className="page">
       <NavBar onBack={() => navigate(-1)}>地址管理</NavBar>
@@ -62,6 +73,7 @@ export default function AddressList() {
                 {a.detail}
               </div>
               <div className="addr-ops">
+                {a.isDefault !== 1 && <span onClick={() => void setDefault(a)}>设为默认</span>}
                 <span onClick={() => navigate(`/address/edit/${a.id}`)}>编辑</span>
                 <span className="addr-del" onClick={() => remove(a)}>
                   删除

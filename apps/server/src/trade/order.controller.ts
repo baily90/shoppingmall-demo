@@ -19,6 +19,11 @@ export class OrderController {
     return this.orderService.list(user.id, query);
   }
 
+  @Get('counts')
+  counts(@CurrentUser() user: UserContext) {
+    return this.orderService.counts(user.id);
+  }
+
   @Get(':id')
   detail(@CurrentUser() user: UserContext, @Param('id', ParseIntPipe) id: number) {
     return this.orderService.detail(user.id, id);

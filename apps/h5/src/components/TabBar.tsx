@@ -1,5 +1,6 @@
 import { TabBar } from 'antd-mobile';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useCartCount } from '../store/cart';
 
 const tabs = [
   { key: '/', title: '首页', icon: '🏠' },
@@ -11,6 +12,7 @@ const tabs = [
 export default function BottomTabBar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { count } = useCartCount();
   const activeKey = tabs.find((t) => t.key === location.pathname)?.key ?? '/';
 
   return (
@@ -21,6 +23,7 @@ export default function BottomTabBar() {
             key={t.key}
             icon={<span className="tab-icon">{t.icon}</span>}
             title={t.title}
+            badge={t.key === '/cart' && count > 0 ? count : undefined}
           />
         ))}
       </TabBar>

@@ -7,11 +7,13 @@ import { addToCart as addToCartApi } from '../api/trade';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
 import { useAuth } from '../store/auth';
+import { useCartCount } from '../store/cart';
 
 export default function Detail() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { user } = useAuth();
+  const { refresh } = useCartCount();
 
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   // 已选规格：groupId -> specValueId
@@ -64,7 +66,7 @@ export default function Detail() {
   const ensureReady = (): Sku | null => {
     if (!user) {
       Toast.show({ content: '请先登录', icon: 'fail' });
-      navigate('/login');
+      navigate('/login', { state: { from: `/product/${id}` } });
       return null;
     }
     if (!matchedSku) {
@@ -80,6 +82,7 @@ export default function Detail() {
     try {
       await addToCartApi(sku.id, quantity);
       Toast.show({ content: '已加入购物车', icon: 'success' });
+      refresh();
     } catch (e) {
       Toast.show({ content: getErrorMessage(e), icon: 'fail' });
     }

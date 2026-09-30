@@ -4,6 +4,7 @@ import { unstableSetRender } from 'antd-mobile';
 import './index.css';
 import App from './App.tsx';
 import { AuthProvider } from './store/auth';
+import { CartCountProvider } from './store/cart';
 
 // antd-mobile v5 的命令式组件（Toast/Dialog/Modal）默认走 React 16~18 的
 // ReactDOM.render / unmountComponentAtNode，而 React 19 已移除这两个 API。
@@ -31,7 +32,9 @@ unstableSetRender((node, container) => {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <CartCountProvider>
+        <App />
+      </CartCountProvider>
     </AuthProvider>
   </StrictMode>,
 );

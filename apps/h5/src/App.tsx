@@ -1,6 +1,5 @@
-import { RouterProvider, createBrowserRouter } from 'react-router-dom';
+import { Navigate, RouterProvider, createBrowserRouter } from 'react-router-dom';
 import Home from './pages/home';
-import List from './pages/list';
 import Detail from './pages/detail';
 import Login from './pages/login';
 import Cart from './pages/cart';
@@ -10,20 +9,77 @@ import AddressEdit from './pages/address-edit';
 import Orders from './pages/orders';
 import OrderDetailPage from './pages/order-detail';
 import Mine from './pages/mine';
+import RequireAuth from './components/RequireAuth';
 
 const router = createBrowserRouter([
   { path: '/', element: <Home /> },
-  { path: '/list', element: <List /> },
+  { path: '/list', element: <Navigate to="/" replace /> },
   { path: '/product/:id', element: <Detail /> },
   { path: '/login', element: <Login /> },
-  { path: '/cart', element: <Cart /> },
-  { path: '/checkout', element: <Checkout /> },
-  { path: '/address', element: <AddressList /> },
-  { path: '/address/edit', element: <AddressEdit /> },
-  { path: '/address/edit/:id', element: <AddressEdit /> },
-  { path: '/orders', element: <Orders /> },
-  { path: '/order/:id', element: <OrderDetailPage /> },
-  { path: '/mine', element: <Mine /> },
+  {
+    path: '/cart',
+    element: (
+      <RequireAuth>
+        <Cart />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/checkout',
+    element: (
+      <RequireAuth>
+        <Checkout />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/address',
+    element: (
+      <RequireAuth>
+        <AddressList />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/address/edit',
+    element: (
+      <RequireAuth>
+        <AddressEdit />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/address/edit/:id',
+    element: (
+      <RequireAuth>
+        <AddressEdit />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/orders',
+    element: (
+      <RequireAuth>
+        <Orders />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/order/:id',
+    element: (
+      <RequireAuth>
+        <OrderDetailPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/mine',
+    element: (
+      <RequireAuth>
+        <Mine />
+      </RequireAuth>
+    ),
+  },
 ]);
 
 export default function App() {

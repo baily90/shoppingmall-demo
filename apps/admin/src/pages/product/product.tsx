@@ -12,6 +12,7 @@ import {
   Space,
   Table,
   Tag,
+  TreeSelect,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined } from '@ant-design/icons';
@@ -37,11 +38,18 @@ const STATUS_OPTIONS = [
 const yuanToCent = (yuan: number) => Math.round(yuan * 100);
 const centToYuan = (cent: number) => cent / 100;
 
-function flattenCategories(nodes: CategoryNode[], prefix = ''): { value: number; label: string }[] {
-  return nodes.flatMap((n) => {
-    const label = prefix ? `${prefix} / ${n.name}` : n.name;
-    return [{ value: n.id, label }, ...flattenCategories(n.children, label)];
-  });
+// 分类树（供 TreeSelect 使用）：任意层级可选
+interface CategoryTreeNode {
+  value: number;
+  title: string;
+  children?: CategoryTreeNode[];
+}
+function toTreeSelect(nodes: CategoryNode[]): CategoryTreeNode[] {
+  return nodes.map((n) => ({
+    value: n.id,
+    title: n.name,
+    ...(n.children.length > 0 ? { children: toTreeSelect(n.children) } : {}),
+  }));
 }
 
 // 商品只能挂到叶子分类：仅收集无子分类的节点（含父级前缀）
@@ -89,7 +97,7 @@ export default function ProductList() {
   const [skuSaving, setSkuSaving] = useState(false);
   const [skuRows, setSkuRows] = useState<SkuRow[]>([]);
 
-  const categoryOptions = useMemo(() => flattenCategories(categories), [categories]);
+  const categoryTree = useMemo(() => toTreeSelect(categories), [categories]);
   const leafCategoryOptions = useMemo(() => flattenLeafCategories(categories), [categories]);
   const brandOptions = useMemo(() => brands.map((b) => ({ value: b.id, label: b.name })), [brands]);
 
@@ -413,15 +421,18 @@ export default function ProductList() {
               setKeyword(v.trim());
             }}
           />
-          <Select
+          <TreeSelect
             allowClear
             placeholder="分类"
-            style={{ width: 160 }}
-            options={categoryOptions}
+            style={{ width: 200 }}
+            treeData={categoryTree}
+            treeDefaultExpandAll
+            showSearch
+            treeNodeFilterProp="title"
             value={filterCategoryId}
             onChange={(v) => {
               setPage(1);
-              setFilterCategoryId(v);
+              setFilterCategoryId(v as number | undefined);
             }}
           />
           <Select

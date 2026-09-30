@@ -26,10 +26,14 @@ export class ProductService {
     const where: Prisma.ProductWhereInput = {
       deletedAt: null,
       ...(keyword ? { name: { contains: keyword, mode: 'insensitive' } } : {}),
-      ...(query.categoryId !== undefined ? { categoryId: query.categoryId } : {}),
       ...(query.brandId !== undefined ? { brandId: query.brandId } : {}),
       ...(query.status !== undefined ? { status: query.status } : {}),
     };
+    // 按父分类筛选时，同时命中其全部后代分类下的商品（与商城端 listOnSale 一致）
+    if (query.categoryId !== undefined) {
+      const categoryIds = await this.categoryService.getDescendantIds(query.categoryId);
+      where.categoryId = { in: categoryIds };
+    }
 
     const [list, total] = await Promise.all([
       this.prisma.product.findMany({

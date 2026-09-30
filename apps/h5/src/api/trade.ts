@@ -118,6 +118,12 @@ export const payOrder = (id: number) => request.post(`/orders/${id}/pay`);
 export const cancelOrder = (id: number) => request.post(`/orders/${id}/cancel`);
 export const confirmOrder = (id: number) => request.post(`/orders/${id}/confirm`);
 
+export interface OrderCounts {
+  total: number;
+  statusCounts: Record<string, number>;
+}
+export const getOrderCounts = () => request.get<ApiResponse<OrderCounts>>('/orders/counts');
+
 // ==================== 订单状态 ====================
 export const OrderStatus = {
   PENDING_PAYMENT: 10,

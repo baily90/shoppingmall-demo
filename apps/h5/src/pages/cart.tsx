@@ -6,9 +6,11 @@ import type { CartItem } from '../api/trade';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
 import BottomTabBar from '../components/TabBar';
+import { useCartCount } from '../store/cart';
 
 export default function Cart() {
   const navigate = useNavigate();
+  const { refresh } = useCartCount();
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -62,6 +64,7 @@ export default function Cart() {
     try {
       await updateCartItem(item.id, { quantity: qty });
       patch(item.id, { quantity: qty });
+      refresh();
     } catch (e) {
       Toast.show({ content: getErrorMessage(e), icon: 'fail' });
     }
@@ -71,6 +74,7 @@ export default function Cart() {
     try {
       await removeCartItem(item.id);
       setItems((prev) => prev.filter((i) => i.id !== item.id));
+      refresh();
     } catch (e) {
       Toast.show({ content: getErrorMessage(e), icon: 'fail' });
     }
@@ -97,7 +101,7 @@ export default function Cart() {
 
   return (
     <div className="page tab-page">
-      <NavBar>购物车</NavBar>
+      <NavBar back={null}>购物车</NavBar>
       {loading ? (
         <div className="empty">加载中…</div>
       ) : items.length === 0 ? (
