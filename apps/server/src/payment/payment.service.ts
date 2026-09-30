@@ -1,13 +1,15 @@
 /**
- * 支付适配层接口：MVP 用 MockPaymentService，后续可换真实支付
- * 具体实现（MockPaymentService）在阶段 3 交易闭环时落地。
+ * 支付适配层接口：MVP 用 MockPaymentService，后续可换真实支付。
+ * 调用方通过 PAYMENT_SERVICE 抽象注入，不感知底层渠道。
  */
-export interface PaymentService {
-  /** 发起支付，返回支付信息（含支付流水号） */
-  createPayment(orderId: number, userId: number, amount: number): Promise<unknown>;
+export interface PaymentResult {
+  /** 渠道流水号（第三方支付返回，mock 下为伪造值） */
+  transactionId: string;
+}
 
-  /** 查询支付状态 */
-  queryPayment(paymentNo: string): Promise<unknown>;
+export interface PaymentService {
+  /** 发起支付，返回支付结果（含渠道流水号） */
+  createPayment(orderNo: string, amount: number): Promise<PaymentResult>;
 }
 
 export const PAYMENT_SERVICE = 'PAYMENT_SERVICE';

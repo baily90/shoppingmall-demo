@@ -1,0 +1,321 @@
+import { Inject, Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import { ErrorCode } from '@mall/shared';
+import { PrismaService } from '../prisma/prisma.service';
+import { BusinessException } from '../common/exceptions/business.exception';
+import { PAYMENT_SERVICE, PaymentService } from '../payment/payment.service';
+import { CreateOrderDto, ListOrderDto, ShipOrderDto } from './dto/order.dto';
+import { OrderStatus, PaymentChannel, PaymentStatus } from './order.constant';
+
+@Injectable()
+export class OrderService {
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(PAYMENT_SERVICE) private readonly payment: PaymentService,
+  ) {}
+
+  async create(userId: number, dto: CreateOrderDto) {
+    const address = await this.prisma.userAddress.findUnique({ where: { id: dto.addressId } });
+    if (!address || address.userId !== userId) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '收货地址不存在');
+    }
+
+    // 同一 SKU 出现多次时合并数量
+    const qtyMap = new Map<number, number>();
+    for (const it of dto.items) {
+      qtyMap.set(it.skuId, (qtyMap.get(it.skuId) ?? 0) + it.quantity);
+    }
+    const skuIds = [...qtyMap.keys()];
+
+    const skus = await this.prisma.productSku.findMany({
+      where: { id: { in: skuIds } },
+      include: {
+        product: {
+          select: { id: true, name: true, mainImage: true, status: true, deletedAt: true },
+        },
+        specValues: { include: { specValue: { include: { group: { select: { name: true } } } } } },
+      },
+    });
+    if (skus.length !== skuIds.length) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '存在无效的 SKU');
+    }
+    const skuMap = new Map(skus.map((s) => [s.id, s]));
+
+    const orderNo = this.genNo('NO');
+    const receiverAddress = this.joinAddress(address);
+
+    const orderId = await this.prisma.$transaction(async (tx) => {
+      let total = 0;
+      for (const [skuId, qty] of qtyMap) {
+        const sku = skuMap.get(skuId)!;
+        if (sku.status !== 1 || sku.product.status !== 1 || sku.product.deletedAt) {
+          throw new BusinessException(ErrorCode.NOT_ALLOWED, `「${sku.product.name}」已下架`);
+        }
+        // 原子扣库存：库存不足时 count=0 → 抛错整体回滚，防止超卖
+        const res = await tx.productSku.updateMany({
+          where: { id: skuId, stock: { gte: qty } },
+          data: { stock: { decrement: qty } },
+        });
+        if (res.count === 0) {
+          throw new BusinessException(ErrorCode.OUT_OF_STOCK, `「${sku.product.name}」库存不足`);
+        }
+        total += sku.price * qty;
+      }
+
+      const order = await tx.order.create({
+        data: {
+          orderNo,
+          userId,
+          totalAmount: total,
+          freightAmount: 0,
+          payAmount: total,
+          status: OrderStatus.PENDING_PAYMENT,
+          receiverName: address.receiverName,
+          receiverPhone: address.receiverPhone,
+          receiverAddress,
+          remark: dto.remark ?? null,
+        },
+      });
+
+      await tx.orderItem.createMany({
+        data: [...qtyMap].map(([skuId, qty]) => {
+          const sku = skuMap.get(skuId)!;
+          return {
+            orderId: order.id,
+            skuId,
+            productId: sku.product.id,
+            productName: sku.product.name,
+            skuSpec: this.specText(sku.specValues),
+            productImage: sku.image ?? sku.product.mainImage,
+            price: sku.price,
+            quantity: qty,
+            totalAmount: sku.price * qty,
+          };
+        }),
+      });
+
+      // 下单成功后清掉购物车里这些 SKU（覆盖「购物车结算」和「立即购买」两个入口）
+      await tx.cart.deleteMany({ where: { userId, skuId: { in: skuIds } } });
+
+      return order.id;
+    });
+
+    return { id: orderId, orderNo };
+  }
+
+  async pay(userId: number, orderId: number) {
+    const order = await this.ensureOwn(userId, orderId);
+    if (order.status !== OrderStatus.PENDING_PAYMENT) {
+      throw new BusinessException(ErrorCode.ORDER_STATE_INVALID, '订单当前状态不可支付');
+    }
+
+    const paymentNo = this.genNo('P');
+    const { transactionId } = await this.payment.createPayment(order.orderNo, order.payAmount);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.create({
+        data: {
+          paymentNo,
+          orderId,
+          userId,
+          amount: order.payAmount,
+          channel: PaymentChannel.MOCK,
+          status: PaymentStatus.PAID,
+          transactionId,
+          paidAt: new Date(),
+        },
+      });
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.PAID, paidAt: new Date() },
+      });
+    });
+
+    return null;
+  }
+
+  async cancel(userId: number, orderId: number) {
+    const order = await this.ensureOwn(userId, orderId);
+    if (order.status !== OrderStatus.PENDING_PAYMENT) {
+      throw new BusinessException(ErrorCode.ORDER_STATE_INVALID, '仅待支付订单可取消');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.CANCELED, canceledAt: new Date() },
+      });
+      // 释放下单时扣掉的库存
+      const items = await tx.orderItem.findMany({ where: { orderId } });
+      for (const it of items) {
+        await tx.productSku.update({
+          where: { id: it.skuId },
+          data: { stock: { increment: it.quantity } },
+        });
+      }
+    });
+
+    return null;
+  }
+
+  async confirm(userId: number, orderId: number) {
+    const order = await this.ensureOwn(userId, orderId);
+    if (order.status !== OrderStatus.SHIPPED) {
+      throw new BusinessException(ErrorCode.ORDER_STATE_INVALID, '仅已发货订单可确认收货');
+    }
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { status: OrderStatus.COMPLETED, completedAt: new Date() },
+    });
+    return null;
+  }
+
+  async list(userId: number, query: ListOrderDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    const where: Prisma.OrderWhereInput = {
+      userId,
+      ...(query.status !== undefined ? { status: query.status } : {}),
+    };
+
+    const [orders, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        include: { items: true },
+        orderBy: { id: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return {
+      list: orders.map((o) => ({
+        id: o.id,
+        orderNo: o.orderNo,
+        status: o.status,
+        totalAmount: o.totalAmount,
+        payAmount: o.payAmount,
+        itemCount: o.items.reduce((s, i) => s + i.quantity, 0),
+        firstImage: o.items[0]?.productImage ?? null,
+        firstName: o.items[0]?.productName ?? '',
+        createdAt: o.createdAt,
+      })),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  async detail(userId: number, orderId: number) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order || order.userId !== userId) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '订单不存在');
+    }
+    return order;
+  }
+
+  // ---------- 管理端 ----------
+
+  async adminList(query: ListOrderDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    const keyword = query.keyword?.trim();
+    const where: Prisma.OrderWhereInput = {
+      ...(query.status !== undefined ? { status: query.status } : {}),
+      ...(keyword ? { orderNo: { contains: keyword } } : {}),
+    };
+
+    const [list, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        include: {
+          items: true,
+          user: { select: { id: true, phone: true, nickname: true } },
+        },
+        orderBy: { id: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return { list, total, page, pageSize };
+  }
+
+  async adminDetail(orderId: number) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        user: { select: { id: true, phone: true, nickname: true } },
+      },
+    });
+    if (!order) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '订单不存在');
+    }
+    return order;
+  }
+
+  async ship(orderId: number, dto: ShipOrderDto) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '订单不存在');
+    }
+    if (order.status !== OrderStatus.PAID) {
+      throw new BusinessException(ErrorCode.ORDER_STATE_INVALID, '仅已支付订单可发货');
+    }
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: OrderStatus.SHIPPED,
+        logisticsCompany: dto.logisticsCompany,
+        logisticsNo: dto.logisticsNo,
+        shippedAt: new Date(),
+      },
+    });
+    return null;
+  }
+
+  // ---------- 私有工具 ----------
+
+  private async ensureOwn(userId: number, orderId: number) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order || order.userId !== userId) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '订单不存在');
+    }
+    return order;
+  }
+
+  private joinAddress(a: {
+    province: string;
+    city: string;
+    district: string;
+    detail: string;
+  }): string {
+    return `${a.province}${a.city}${a.district}${a.detail}`;
+  }
+
+  private specText(
+    specValues: { specValue: { value: string; group: { name: string } } }[],
+  ): string {
+    return specValues.map((sv) => `${sv.specValue.group.name}:${sv.specValue.value}`).join(' / ');
+  }
+
+  /** 生成业务单号：前缀 + 时间戳(毫秒) + 6 位随机数 */
+  private genNo(prefix: string): string {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const ts =
+      `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+      `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}` +
+      String(d.getMilliseconds()).padStart(3, '0');
+    const rand = Math.floor(Math.random() * 1_000_000)
+      .toString()
+      .padStart(6, '0');
+    return `${prefix}${ts}${rand}`;
+  }
+}

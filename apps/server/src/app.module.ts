@@ -8,6 +8,8 @@ import { AuthModule } from './auth/auth.module';
 import { SystemModule } from './system/system.module';
 import { ProductModule } from './product/product.module';
 import { StorageModule } from './storage/storage.module';
+import { PaymentModule } from './payment/payment.module';
+import { TradeModule } from './trade/trade.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { StorageModule } from './storage/storage.module';
     SystemModule,
     ProductModule,
     StorageModule,
+    PaymentModule,
+    TradeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

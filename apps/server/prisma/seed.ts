@@ -115,6 +115,25 @@ const permissionDefs: PermDef[] = [
       },
     ],
   },
+  {
+    code: 'order',
+    name: '订单管理',
+    type: 1,
+    path: '/order',
+    icon: 'ProfileOutlined',
+    sort: 3,
+    children: [
+      {
+        code: 'order:list',
+        name: '订单列表',
+        type: 2,
+        path: '/order/order',
+        icon: 'ProfileOutlined',
+        sort: 1,
+        children: [{ code: 'order:ship', name: '订单发货', type: 3, sort: 1 }],
+      },
+    ],
+  },
 ];
 
 async function createPermission(
