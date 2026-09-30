@@ -3,12 +3,15 @@ import { Button, NavBar, Stepper, Swiper, Tag, Toast } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getProduct } from '../api/store';
 import type { ProductDetail, Sku } from '../api/store';
+import { addToCart as addToCartApi } from '../api/trade';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
+import { useAuth } from '../store/auth';
 
 export default function Detail() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user } = useAuth();
 
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   // 已选规格：groupId -> specValueId
@@ -57,8 +60,49 @@ export default function Detail() {
     setSelected((prev) => ({ ...prev, [groupId]: valueId }));
   };
 
-  const addToCart = () => {
-    Toast.show({ content: '购物车将在阶段 3 实现', icon: 'fail' });
+  // 未登录或未选全规格时返回 null，阻止后续操作
+  const ensureReady = (): Sku | null => {
+    if (!user) {
+      Toast.show({ content: '请先登录', icon: 'fail' });
+      navigate('/login');
+      return null;
+    }
+    if (!matchedSku) {
+      Toast.show({ content: '请先选择规格', icon: 'fail' });
+      return null;
+    }
+    return matchedSku;
+  };
+
+  const addToCart = async () => {
+    const sku = ensureReady();
+    if (!sku) return;
+    try {
+      await addToCartApi(sku.id, quantity);
+      Toast.show({ content: '已加入购物车', icon: 'success' });
+    } catch (e) {
+      Toast.show({ content: getErrorMessage(e), icon: 'fail' });
+    }
+  };
+
+  const buyNow = () => {
+    const sku = ensureReady();
+    if (!sku || !detail) return;
+    const specText = sku.specValues.map((v) => `${v.groupName}:${v.value}`).join(' / ');
+    navigate('/checkout', {
+      state: {
+        items: [
+          {
+            skuId: sku.id,
+            quantity,
+            name: detail.name,
+            image: sku.image ?? detail.mainImage,
+            spec: specText,
+            price: sku.price,
+          },
+        ],
+      },
+    });
   };
 
   if (!detail) {
@@ -145,10 +189,19 @@ export default function Detail() {
           block
           color="primary"
           size="large"
-          onClick={addToCart}
+          onClick={() => void addToCart()}
           disabled={matchedSku != null && matchedSku.stock === 0}
         >
           加入购物车
+        </Button>
+        <Button
+          block
+          color="danger"
+          size="large"
+          onClick={buyNow}
+          disabled={matchedSku != null && matchedSku.stock === 0}
+        >
+          立即购买
         </Button>
       </div>
     </div>

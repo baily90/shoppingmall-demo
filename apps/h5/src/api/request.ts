@@ -1,7 +1,78 @@
 import axios from 'axios';
+import type { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { ErrorCode } from '@mall/shared';
 
-// 商城端统一 axios 实例（阶段 3 购物车/下单再加用户 token 注入）
+const ACCESS_TOKEN_KEY = 'mall_access_token';
+const REFRESH_TOKEN_KEY = 'mall_refresh_token';
+
+export const getAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY);
+export const getRefreshToken = () => localStorage.getItem(REFRESH_TOKEN_KEY);
+
+export const setTokens = (access: string, refresh: string) => {
+  localStorage.setItem(ACCESS_TOKEN_KEY, access);
+  localStorage.setItem(REFRESH_TOKEN_KEY, refresh);
+};
+
+export const clearTokens = () => {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+};
+
+interface RetriableConfig extends InternalAxiosRequestConfig {
+  _retry?: boolean;
+}
+
 const request = axios.create({ baseURL: '/api', timeout: 10000 });
+
+// 请求拦截：注入用户 accessToken
+request.interceptors.request.use((config) => {
+  const token = getAccessToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// 响应拦截：未登录/accessToken 过期 → 用 refreshToken 换新后重试一次
+request.interceptors.response.use(
+  (res) => res,
+  async (error: AxiosError) => {
+    const code = (error.response?.data as { code?: number } | undefined)?.code;
+    const original = error.config as RetriableConfig | undefined;
+
+    if (
+      code === ErrorCode.UNAUTHORIZED &&
+      original &&
+      !original._retry &&
+      !original.url?.includes('/auth/refresh') &&
+      !original.url?.includes('/auth/login')
+    ) {
+      original._retry = true;
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) {
+        clearTokens();
+        window.location.href = '/login';
+        return Promise.reject(error);
+      }
+      try {
+        const res = await axios.post('/api/auth/refresh', { refreshToken });
+        const { accessToken, refreshToken: newRefresh } = res.data.data as {
+          accessToken: string;
+          refreshToken: string;
+        };
+        setTokens(accessToken, newRefresh);
+        original.headers.Authorization = `Bearer ${accessToken}`;
+        return request(original);
+      } catch {
+        clearTokens();
+        window.location.href = '/login';
+        return Promise.reject(error);
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
 
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
