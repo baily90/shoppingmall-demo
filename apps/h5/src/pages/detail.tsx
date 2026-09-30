@@ -133,6 +133,13 @@ export default function Detail() {
         )}
       </div>
 
+      {detail.detail && (
+        <div className="detail-desc">
+          <div className="detail-desc-title">商品详情</div>
+          <div className="detail-desc-content">{detail.detail}</div>
+        </div>
+      )}
+
       <div className="detail-footer">
         <Button
           block

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { NavBar, SearchBar, Toast } from 'antd-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { flattenCategories, listCategories, listProducts } from '../api/store';
-import type { FlatCategory, StoreProductRow } from '../api/store';
+import { listBrands, listCategories, listProducts } from '../api/store';
+import type { BrandRow, CategoryNode, StoreProductRow } from '../api/store';
 import { getErrorMessage } from '../api/request';
 import CategoryBar from '../components/CategoryBar';
 import ProductCard from '../components/ProductCard';
@@ -14,19 +14,39 @@ export default function List() {
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryId = searchParams.get('categoryId');
   const categoryIdNum = categoryId ? Number(categoryId) : undefined;
+  const brandId = searchParams.get('brandId');
+  const brandIdNum = brandId ? Number(brandId) : undefined;
   const keyword = searchParams.get('keyword') ?? '';
 
-  const [categories, setCategories] = useState<FlatCategory[]>([]);
+  const [categories, setCategories] = useState<CategoryNode[]>([]);
+  const [brands, setBrands] = useState<BrandRow[]>([]);
   const [products, setProducts] = useState<StoreProductRow[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
+  // 合并更新查询参数，避免互相覆盖（分类/品牌/关键词可叠加）
+  const updateParams = (patch: Record<string, string | undefined>) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v == null || v === '') next.delete(k);
+      else next.set(k, v);
+    }
+    setSearchParams(next);
+  };
+
   useEffect(() => {
     void listCategories()
-      .then((r) => setCategories(flattenCategories(r.data.data)))
+      .then((r) => setCategories(r.data.data))
       .catch(() => {});
   }, []);
+
+  // 品牌列表随当前分类变化（限定在该分类下有在售商品的品牌）
+  useEffect(() => {
+    void listBrands({ categoryId: categoryIdNum })
+      .then((r) => setBrands(r.data.data.list))
+      .catch(() => setBrands([]));
+  }, [categoryIdNum]);
 
   useEffect(() => {
     setLoading(true);
@@ -37,6 +57,7 @@ export default function List() {
           pageSize: PAGE_SIZE,
           keyword: keyword || undefined,
           categoryId: categoryIdNum,
+          brandId: brandIdNum,
         });
         setProducts(res.data.data.list);
         setTotal(res.data.data.total);
@@ -47,7 +68,7 @@ export default function List() {
         setLoading(false);
       }
     })();
-  }, [keyword, categoryIdNum]);
+  }, [keyword, categoryIdNum, brandIdNum]);
 
   const loadMore = async () => {
     setLoading(true);
@@ -57,6 +78,7 @@ export default function List() {
         pageSize: PAGE_SIZE,
         keyword: keyword || undefined,
         categoryId: categoryIdNum,
+        brandId: brandIdNum,
       });
       setProducts((prev) => [...prev, ...res.data.data.list]);
       setTotal(res.data.data.total);
@@ -71,8 +93,8 @@ export default function List() {
   const hasMore = products.length < total;
 
   const selectCategory = (id?: number) => {
-    if (id != null) setSearchParams({ categoryId: String(id) });
-    else setSearchParams({});
+    // 切换分类时重置品牌（品牌列表随分类变化，原选中品牌可能已不存在）
+    updateParams({ categoryId: id != null ? String(id) : undefined, brandId: undefined });
   };
 
   return (
@@ -81,9 +103,30 @@ export default function List() {
       <SearchBar
         placeholder="搜索商品"
         defaultValue={keyword}
-        onSearch={(v) => (v ? setSearchParams({ keyword: v }) : setSearchParams({}))}
+        onSearch={(v) => updateParams({ keyword: v || undefined })}
       />
       <CategoryBar categories={categories} activeId={categoryIdNum} onSelect={selectCategory} />
+
+      {brands.length > 0 && (
+        <div className="category-bar">
+          <span className="filter-label">品牌：</span>
+          <div
+            className={brandIdNum == null ? 'category-chip active' : 'category-chip'}
+            onClick={() => updateParams({ brandId: undefined })}
+          >
+            全部
+          </div>
+          {brands.map((b) => (
+            <div
+              key={b.id}
+              className={brandIdNum === b.id ? 'category-chip active' : 'category-chip'}
+              onClick={() => updateParams({ brandId: String(b.id) })}
+            >
+              {b.name}
+            </div>
+          ))}
+        </div>
+      )}
 
       {products.length === 0 && !loading ? (
         <div className="empty">暂无商品</div>

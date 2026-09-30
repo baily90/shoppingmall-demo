@@ -167,3 +167,18 @@ export class UpdateSkuDto {
   @IsIn([0, 1])
   status?: number;
 }
+
+/** 批量更新 SKU 的单项：SKU id + 要改的字段（字段语义同 UpdateSkuDto） */
+export class UpdateSkuItemDto extends UpdateSkuDto {
+  @IsInt({ message: 'SKU id 必须为整数' })
+  id: number;
+}
+
+/** 批量更新 SKU：一次性提交多个 SKU，后端用事务保证原子性 */
+export class BatchUpdateSkuDto {
+  @IsArray({ message: 'skus 必须是数组' })
+  @ArrayNotEmpty({ message: 'skus 不能为空' })
+  @ValidateNested({ each: true })
+  @Type(() => UpdateSkuItemDto)
+  skus: UpdateSkuItemDto[];
+}

@@ -134,7 +134,7 @@ export default function BrandList() {
       width: 90,
       render: (logo: string | null) =>
         logo ? (
-          <img src={logo} alt="" style={{ width: 40, height: 40, objectFit: 'cover' }} />
+          <img src={logo} alt="" style={{ width: 40, height: 40, objectFit: 'contain' }} />
         ) : (
           '-'
         ),

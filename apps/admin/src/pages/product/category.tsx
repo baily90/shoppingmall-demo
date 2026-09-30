@@ -32,8 +32,20 @@ interface ParentTreeNode {
   children: ParentTreeNode[];
 }
 
+// 分类最多两级：只有一级分类能作为父级，子级不再放进可选列表
 function toParentTree(nodes: CategoryNode[]): ParentTreeNode[] {
-  return nodes.map((n) => ({ value: n.id, title: n.name, children: toParentTree(n.children) }));
+  return nodes.map((n) => ({ value: n.id, title: n.name, children: [] }));
+}
+
+// rc-table 用真值判断「是否有子级」，空数组 [] 也会被当成有子级而画展开图标；
+// 把叶子节点的 children 置为 undefined（假值），二级分类就不再显示展开/收起按钮
+function pruneEmptyChildren(nodes: CategoryNode[]): CategoryNode[] {
+  return nodes.map((n) => ({
+    ...n,
+    children: n.children.length
+      ? pruneEmptyChildren(n.children)
+      : (undefined as unknown as CategoryNode[]),
+  }));
 }
 
 export default function CategoryList() {
@@ -52,7 +64,7 @@ export default function CategoryList() {
   const load = useCallback(async () => {
     try {
       const res = await productApi.listCategories();
-      setData(res.data.data);
+      setData(pruneEmptyChildren(res.data.data));
     } catch {
       message.error('加载失败');
     } finally {
@@ -167,7 +179,7 @@ export default function CategoryList() {
       width: 80,
       render: (icon: string | null) =>
         icon ? (
-          <img src={icon} alt="" style={{ width: 32, height: 32, objectFit: 'cover' }} />
+          <img src={icon} alt="" style={{ width: 32, height: 32, objectFit: 'contain' }} />
         ) : (
           '-'
         ),
@@ -178,7 +190,7 @@ export default function CategoryList() {
       width: 220,
       render: (_, row) => (
         <Space size="small">
-          {hasPermission('category:create') && (
+          {hasPermission('category:create') && row.level < 2 && (
             <Button size="small" type="link" onClick={() => openCreate(row.id)}>
               新增子级
             </Button>
@@ -210,7 +222,14 @@ export default function CategoryList() {
         )}
       </Space>
 
-      <Table rowKey="id" loading={loading} dataSource={data} columns={columns} pagination={false} />
+      <Table
+        rowKey="id"
+        loading={loading}
+        dataSource={data}
+        columns={columns}
+        pagination={false}
+        expandable={{ defaultExpandAllRows: true }}
+      />
 
       <Modal
         title={editing ? '编辑分类' : '新增分类'}
@@ -237,12 +256,7 @@ export default function CategoryList() {
           }
         >
           <Form.Item name="parentId" label="父级分类">
-            <TreeSelect
-              allowClear={!editing}
-              treeData={parentTree}
-              placeholder="不选则为顶级"
-              treeDefaultExpandAll
-            />
+            <TreeSelect allowClear={!editing} treeData={parentTree} placeholder="不选则为顶级" />
           </Form.Item>
           <Form.Item
             name="name"

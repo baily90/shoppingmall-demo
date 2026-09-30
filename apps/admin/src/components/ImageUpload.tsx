@@ -39,7 +39,7 @@ export function ImageUpload({
         <img
           src={value}
           alt="upload"
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
         />
       ) : (
         <div>
@@ -62,9 +62,12 @@ export function MultiImageUpload({
   max?: number;
 }) {
   const { message } = App.useApp();
+  const [loading, setLoading] = useState(false);
 
+  // 受控 fileList 直接由 value 派生，新增/删除都显式写回 onChange，
+  // 不依赖 antd 内部 fileList 反解 response（受控模式下该链路不可靠）。
   const fileList: UploadFile[] = value.map((url, i) => ({
-    uid: url,
+    uid: `${i}-${url}`,
     name: `img-${i}`,
     status: 'done',
     url,
@@ -75,26 +78,27 @@ export function MultiImageUpload({
       listType="picture-card"
       accept="image/*"
       fileList={fileList}
-      onChange={({ fileList: fl }) => {
-        const urls = fl
-          .filter((f) => f.status === 'done')
-          .map((f) => ((f.response as { url?: string } | undefined)?.url ?? f.url ?? '') as string)
-          .filter(Boolean);
-        onChange?.(urls);
+      onRemove={(file) => {
+        onChange?.(value.filter((u) => u !== file.url));
+        return false;
       }}
       customRequest={async ({ file, onSuccess, onError }) => {
+        setLoading(true);
         try {
           const res = await uploadImage(file as File);
-          onSuccess?.({ url: res.data.data.url });
+          onChange?.([...value, res.data.data.url]);
+          onSuccess?.(res.data);
         } catch (e) {
           onError?.(e as Error);
           message.error(getErrorMessage(e));
+        } finally {
+          setLoading(false);
         }
       }}
     >
       {value.length >= max ? null : (
         <div>
-          <PlusOutlined />
+          {loading ? <LoadingOutlined /> : <PlusOutlined />}
           <div style={{ marginTop: 8 }}>上传</div>
         </div>
       )}

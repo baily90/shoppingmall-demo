@@ -4,11 +4,15 @@ import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { PageQueryDto } from '../common/dto/query.dto';
-import { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
+import { CreateBrandDto, StoreBrandQueryDto, UpdateBrandDto } from './dto/brand.dto';
+import { CategoryService } from './category.service';
 
 @Injectable()
 export class BrandService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly categoryService: CategoryService,
+  ) {}
 
   async list(query: PageQueryDto, onlyEnabled = false) {
     const page = query.page ?? 1;
@@ -18,6 +22,36 @@ export class BrandService {
       deletedAt: null,
       ...(keyword ? { name: { contains: keyword, mode: 'insensitive' } } : {}),
       ...(onlyEnabled ? { status: 1 } : {}),
+    };
+
+    const [list, total] = await Promise.all([
+      this.prisma.brand.findMany({
+        where,
+        orderBy: [{ sort: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.brand.count({ where }),
+    ]);
+
+    return { list, total, page, pageSize };
+  }
+
+  /** 商城端品牌列表：只出启用品牌；传 categoryId 时只返回该分类（含后代）下有在售商品的品牌 */
+  async listStore(query: StoreBrandQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 100;
+    const categoryIds =
+      query.categoryId !== undefined
+        ? await this.categoryService.getDescendantIds(query.categoryId)
+        : undefined;
+
+    const where: Prisma.BrandWhereInput = {
+      deletedAt: null,
+      status: 1,
+      ...(categoryIds
+        ? { products: { some: { categoryId: { in: categoryIds }, status: 1, deletedAt: null } } }
+        : {}),
     };
 
     const [list, total] = await Promise.all([

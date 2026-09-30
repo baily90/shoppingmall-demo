@@ -15,6 +15,7 @@ import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { ProductService } from './product.service';
 import {
+  BatchUpdateSkuDto,
   CreateProductDto,
   ListProductDto,
   UpdateProductDto,
@@ -48,6 +49,12 @@ export class ProductController {
   @Permissions('product:update')
   updateSku(@Param('skuId', ParseIntPipe) skuId: number, @Body() dto: UpdateSkuDto) {
     return this.productService.updateSku(skuId, dto);
+  }
+
+  @Patch('skus')
+  @Permissions('product:update')
+  updateSkus(@Body() dto: BatchUpdateSkuDto) {
+    return this.productService.batchUpdateSkus(dto);
   }
 
   @Patch(':id')

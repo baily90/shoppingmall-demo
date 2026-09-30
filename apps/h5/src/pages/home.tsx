@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { NavBar, SearchBar, Toast } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
-import { flattenCategories, listCategories, listProducts } from '../api/store';
-import type { FlatCategory, StoreProductRow } from '../api/store';
+import { listCategories, listProducts } from '../api/store';
+import type { CategoryNode, StoreProductRow } from '../api/store';
 import { getErrorMessage } from '../api/request';
 import CategoryBar from '../components/CategoryBar';
 import ProductCard from '../components/ProductCard';
 
 export default function Home() {
   const navigate = useNavigate();
-  const [categories, setCategories] = useState<FlatCategory[]>([]);
+  const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [products, setProducts] = useState<StoreProductRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -20,7 +20,7 @@ export default function Home() {
           listCategories(),
           listProducts({ page: 1, pageSize: 10 }),
         ]);
-        setCategories(flattenCategories(catRes.data.data));
+        setCategories(catRes.data.data);
         setProducts(prodRes.data.data.list);
       } catch (e) {
         Toast.show({ content: getErrorMessage(e), icon: 'fail' });

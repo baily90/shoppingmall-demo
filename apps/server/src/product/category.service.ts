@@ -31,13 +31,37 @@ export class CategoryService {
     return this.buildTree(list);
   }
 
+  /** 收集某分类及其全部后代的 id（用于「按父分类查所有子分类商品」） */
+  async getDescendantIds(id: number): Promise<number[]> {
+    const all = await this.prisma.category.findMany({
+      where: { deletedAt: null },
+      select: { id: true, parentId: true },
+    });
+    const childrenMap = new Map<number, number[]>();
+    for (const c of all) {
+      if (c.parentId != null) {
+        const arr = childrenMap.get(c.parentId) ?? [];
+        arr.push(c.id);
+        childrenMap.set(c.parentId, arr);
+      }
+    }
+    const ids: number[] = [];
+    const stack = [id];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      ids.push(cur);
+      for (const child of childrenMap.get(cur) ?? []) stack.push(child);
+    }
+    return ids;
+  }
+
   async create(dto: CreateCategoryDto) {
     let level = 1;
     if (dto.parentId != null) {
       const parent = await this.ensureCategory(dto.parentId);
       level = parent.level + 1;
-      if (level > 3) {
-        throw new BusinessException(ErrorCode.NOT_ALLOWED, '分类最多支持三级');
+      if (level > 2) {
+        throw new BusinessException(ErrorCode.NOT_ALLOWED, '分类最多支持两级');
       }
     }
 

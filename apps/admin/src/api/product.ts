@@ -135,6 +135,10 @@ export interface UpdateSkuPayload {
   status?: number;
 }
 
+export interface BatchUpdateSkuItem extends UpdateSkuPayload {
+  id: number;
+}
+
 export const listProducts = (params: ListProductParams) =>
   request.get<{ code: number; data: PageResult<ProductRow>; message: string }>('/admin/products', {
     params,
@@ -147,6 +151,8 @@ export const updateProduct = (id: number, data: Partial<CreateProductPayload>) =
 export const deleteProduct = (id: number) => request.delete(`/admin/products/${id}`);
 export const updateSku = (skuId: number, data: UpdateSkuPayload) =>
   request.patch(`/admin/products/skus/${skuId}`, data);
+export const updateSkus = (skus: BatchUpdateSkuItem[]) =>
+  request.patch('/admin/products/skus', { skus });
 
 // ==================== 图片上传 ====================
 export const uploadImage = (file: File) => {

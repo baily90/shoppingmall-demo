@@ -13,18 +13,11 @@ export interface CategoryNode {
   children: CategoryNode[];
 }
 
-export interface FlatCategory {
+// ==================== 品牌 ====================
+export interface BrandRow {
   id: number;
   name: string;
-  level: number;
-}
-
-/** 把分类树拍平成一维数组（供横向筛选栏使用，level 用于缩进） */
-export function flattenCategories(nodes: CategoryNode[]): FlatCategory[] {
-  return nodes.flatMap((n) => [
-    { id: n.id, name: n.name, level: n.level },
-    ...flattenCategories(n.children),
-  ]);
+  logo: string | null;
 }
 
 // ==================== 商品列表 ====================
@@ -88,11 +81,18 @@ export interface ProductDetail {
 
 export const listCategories = () => request.get<ApiResponse<CategoryNode[]>>('/categories');
 
+export const listBrands = (params: { categoryId?: number; pageSize?: number }) =>
+  request.get<ApiResponse<{ list: BrandRow[]; total: number; page: number; pageSize: number }>>(
+    '/brands',
+    { params },
+  );
+
 export const listProducts = (params: {
   page?: number;
   pageSize?: number;
   keyword?: string;
   categoryId?: number;
+  brandId?: number;
 }) => request.get<ApiResponse<StoreProductList>>('/products', { params });
 
 export const getProduct = (id: number) =>

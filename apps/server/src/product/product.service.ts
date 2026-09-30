@@ -4,15 +4,20 @@ import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import {
+  BatchUpdateSkuDto,
   CreateProductDto,
   ListProductDto,
   UpdateProductDto,
   UpdateSkuDto,
 } from './dto/product.dto';
+import { CategoryService } from './category.service';
 
 @Injectable()
 export class ProductService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly categoryService: CategoryService,
+  ) {}
 
   async list(query: ListProductDto) {
     const page = query.page ?? 1;
@@ -49,11 +54,16 @@ export class ProductService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const keyword = query.keyword?.trim();
+    // 按父分类查时，同时命中其全部后代分类下的商品
+    const categoryIds =
+      query.categoryId !== undefined
+        ? await this.categoryService.getDescendantIds(query.categoryId)
+        : undefined;
     const where: Prisma.ProductWhereInput = {
       deletedAt: null,
       status: 1,
       ...(keyword ? { name: { contains: keyword, mode: 'insensitive' } } : {}),
-      ...(query.categoryId !== undefined ? { categoryId: query.categoryId } : {}),
+      ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
       ...(query.brandId !== undefined ? { brandId: query.brandId } : {}),
     };
 
@@ -105,6 +115,7 @@ export class ProductService {
 
   async create(dto: CreateProductDto) {
     await this.ensureCategory(dto.categoryId);
+    await this.ensureLeafCategory(dto.categoryId);
     await this.ensureBrand(dto.brandId);
 
     const productId = await this.prisma.$transaction(async (tx) => {
@@ -165,7 +176,10 @@ export class ProductService {
 
   async update(id: number, dto: UpdateProductDto) {
     await this.ensureProduct(id);
-    if (dto.categoryId !== undefined) await this.ensureCategory(dto.categoryId);
+    if (dto.categoryId !== undefined) {
+      await this.ensureCategory(dto.categoryId);
+      await this.ensureLeafCategory(dto.categoryId);
+    }
     if (dto.brandId !== undefined) await this.ensureBrand(dto.brandId);
 
     const data: Prisma.ProductUpdateInput = {};
@@ -210,6 +224,30 @@ export class ProductService {
       data,
       select: { id: true, price: true, stock: true },
     });
+  }
+
+  /** 批量更新 SKU：一次事务提交，要么全成功要么全回滚，避免「改一半」 */
+  async batchUpdateSkus(dto: BatchUpdateSkuDto) {
+    // 先校验所有 SKU 都存在，避免事务跑到一半才报「不存在」
+    const ids = [...new Set(dto.skus.map((s) => s.id))];
+    const found = await this.prisma.productSku.count({ where: { id: { in: ids } } });
+    if (found !== ids.length) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '存在无效的 SKU');
+    }
+
+    await this.prisma.$transaction(
+      dto.skus.map((s) => {
+        const data: Prisma.ProductSkuUpdateInput = {};
+        if (s.price !== undefined) data.price = s.price;
+        if (s.originalPrice !== undefined) data.originalPrice = s.originalPrice;
+        if (s.stock !== undefined) data.stock = s.stock;
+        if (s.skuCode !== undefined) data.skuCode = s.skuCode;
+        if (s.image !== undefined) data.image = s.image;
+        if (s.status !== undefined) data.status = s.status;
+        return this.prisma.productSku.update({ where: { id: s.id }, data });
+      }),
+    );
+    return null;
   }
 
   /** 商品完整详情：分类/品牌 + 轮播图 + 规格组→值 + SKU（含规格组合） */
@@ -277,6 +315,16 @@ export class ProductService {
       throw new BusinessException(ErrorCode.NOT_FOUND, '分类不存在');
     }
     return found;
+  }
+
+  /** 商品只能挂到叶子分类（无子分类），避免父分类既有子分类又直接挂商品 */
+  private async ensureLeafCategory(id: number) {
+    const childCount = await this.prisma.category.count({
+      where: { parentId: id, deletedAt: null },
+    });
+    if (childCount > 0) {
+      throw new BusinessException(ErrorCode.NOT_ALLOWED, '请选择叶子分类（该分类下还有子分类）');
+    }
   }
 
   private async ensureBrand(id: number) {

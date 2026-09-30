@@ -44,6 +44,19 @@ function flattenCategories(nodes: CategoryNode[], prefix = ''): { value: number;
   });
 }
 
+// 商品只能挂到叶子分类：仅收集无子分类的节点（含父级前缀）
+function flattenLeafCategories(
+  nodes: CategoryNode[],
+  prefix = '',
+): { value: number; label: string }[] {
+  return nodes.flatMap((n) => {
+    const label = prefix ? `${prefix} / ${n.name}` : n.name;
+    return n.children.length > 0
+      ? flattenLeafCategories(n.children, label)
+      : [{ value: n.id, label }];
+  });
+}
+
 export default function ProductList() {
   const { message } = App.useApp();
   const { hasPermission } = useAuth();
@@ -77,6 +90,7 @@ export default function ProductList() {
   const [skuRows, setSkuRows] = useState<SkuRow[]>([]);
 
   const categoryOptions = useMemo(() => flattenCategories(categories), [categories]);
+  const leafCategoryOptions = useMemo(() => flattenLeafCategories(categories), [categories]);
   const brandOptions = useMemo(() => brands.map((b) => ({ value: b.id, label: b.name })), [brands]);
 
   const load = useCallback(async () => {
@@ -102,7 +116,7 @@ export default function ProductList() {
     try {
       const [catRes, brandRes] = await Promise.all([
         productApi.listCategories(),
-        productApi.listBrands({ page: 1, pageSize: 999 }),
+        productApi.listBrands({ page: 1, pageSize: 100 }),
       ]);
       setCategories(catRes.data.data);
       setBrands(brandRes.data.data.list);
@@ -225,16 +239,16 @@ export default function ProductList() {
   const handleSaveSkus = async () => {
     setSkuSaving(true);
     try {
-      await Promise.all(
-        skuRows.map((s) =>
-          productApi.updateSku(s.id, {
-            price: s.price,
-            originalPrice: s.originalPrice,
-            stock: s.stock,
-            skuCode: s.skuCode,
-            status: s.status,
-          }),
-        ),
+      // 批量提交：后端一次事务保存全部 SKU，要么全成功要么全回滚
+      await productApi.updateSkus(
+        skuRows.map((s) => ({
+          id: s.id,
+          price: s.price,
+          originalPrice: s.originalPrice,
+          stock: s.stock,
+          skuCode: s.skuCode,
+          status: s.status,
+        })),
       );
       message.success('SKU 已保存');
       setSkuOpen(false);
@@ -252,7 +266,7 @@ export default function ProductList() {
       dataIndex: 'name',
       render: (name: string, row) => (
         <Space>
-          <img src={row.mainImage} alt="" style={{ width: 44, height: 44, objectFit: 'cover' }} />
+          <img src={row.mainImage} alt="" style={{ width: 44, height: 44, objectFit: 'contain' }} />
           <div>
             <div>{name}</div>
             {row.subTitle && <div style={{ color: '#999', fontSize: 12 }}>{row.subTitle}</div>}
@@ -506,7 +520,11 @@ export default function ProductList() {
               label="分类"
               rules={[{ required: true, message: '请选择分类' }]}
             >
-              <Select style={{ width: 240 }} options={categoryOptions} placeholder="请选择" />
+              <Select
+                style={{ width: 240 }}
+                options={leafCategoryOptions}
+                placeholder="请选择叶子分类"
+              />
             </Form.Item>
             <Form.Item
               name="brandId"
