@@ -64,6 +64,7 @@ export interface OrderSummary {
   firstImage: string | null;
   firstName: string;
   createdAt: string;
+  payExpireAt: string;
 }
 
 export interface OrderItem {
@@ -97,6 +98,7 @@ export interface OrderDetail {
   shippedAt: string | null;
   completedAt: string | null;
   createdAt: string;
+  payExpireAt: string;
   items: OrderItem[];
 }
 

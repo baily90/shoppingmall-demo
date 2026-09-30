@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, NavBar, Toast } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { cancelOrder, confirmOrder, getOrder, ORDER_STATUS_TEXT, payOrder } from '../api/trade';
@@ -6,10 +6,18 @@ import type { OrderDetail } from '../api/trade';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
 
+const formatCountdown = (ms: number) => {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
+
 export default function OrderDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [order, setOrder] = useState<OrderDetail | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const load = async () => {
     try {
@@ -22,6 +30,28 @@ export default function OrderDetailPage() {
   useEffect(() => {
     void load();
   }, [id]);
+
+  // 每秒 tick 一次，驱动「待支付」倒计时
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const remainMs =
+    order?.status === 10 && order.payExpireAt ? new Date(order.payExpireAt).getTime() - now : 0;
+
+  // 倒计时归零时自动刷新一次，拉取后端「自动取消」后的最新状态（仅触发一次）
+  const autoReloaded = useRef(false);
+  useEffect(() => {
+    if (!order || order.status !== 10) {
+      autoReloaded.current = false;
+      return;
+    }
+    if (remainMs <= 0 && !autoReloaded.current) {
+      autoReloaded.current = true;
+      void load();
+    }
+  }, [remainMs, order?.status]);
 
   const act = async (fn: () => Promise<unknown>, msg: string) => {
     try {
@@ -46,6 +76,9 @@ export default function OrderDetailPage() {
     <div className="page">
       <NavBar onBack={() => navigate(-1)}>订单详情</NavBar>
       <div className="od-status">{ORDER_STATUS_TEXT[order.status]}</div>
+      {order.status === 10 && remainMs > 0 && (
+        <div className="od-countdown">支付剩余 {formatCountdown(remainMs)}，超时自动取消</div>
+      )}
 
       <div className="od-card">
         <div className="od-row">

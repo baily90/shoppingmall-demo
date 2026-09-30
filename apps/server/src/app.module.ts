@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -14,6 +15,16 @@ import { TradeModule } from './trade/trade.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // BullMQ 全局连接：复用阶段 1 的 Redis（订单延迟任务用）
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST', 'localhost'),
+          port: config.get<number>('REDIS_PORT', 6379),
+        },
+      }),
+    }),
     PrismaModule,
     RedisModule,
     AuthModule,

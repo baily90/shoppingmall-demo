@@ -7,6 +7,15 @@ export const OrderStatus = {
   CANCELED: 50, // 已取消
 } as const;
 
+/** 订单队列名（BullMQ） */
+export const ORDER_QUEUE = 'order-queue';
+
+/** 自动取消任务名（延迟任务：到点未支付则取消订单） */
+export const AUTO_CANCEL_JOB = 'auto-cancel';
+
+/** 待支付超时自动取消：默认 15 分钟，可用环境变量 ORDER_PAY_TIMEOUT_SECONDS 覆盖（便于联调） */
+export const DEFAULT_PAY_TIMEOUT_SECONDS = 15 * 60;
+
 /** 支付渠道（Payment.channel） */
 export const PaymentChannel = {
   MOCK: 1, // mock 支付

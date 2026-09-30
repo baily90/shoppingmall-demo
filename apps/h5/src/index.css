@@ -494,6 +494,13 @@ body {
   font-size: 17px;
   font-weight: 600;
 }
+.od-countdown {
+  background: #fff7e6;
+  color: #d46b08;
+  text-align: center;
+  padding: 10px;
+  font-size: 14px;
+}
 .od-card {
   background: #fff;
   margin-top: 8px;

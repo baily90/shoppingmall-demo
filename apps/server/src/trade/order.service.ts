@@ -1,18 +1,36 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import type { Prisma } from '@prisma/client';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { PAYMENT_SERVICE, PaymentService } from '../payment/payment.service';
 import { CreateOrderDto, ListOrderDto, ShipOrderDto } from './dto/order.dto';
-import { OrderStatus, PaymentChannel, PaymentStatus } from './order.constant';
+import {
+  AUTO_CANCEL_JOB,
+  DEFAULT_PAY_TIMEOUT_SECONDS,
+  OrderStatus,
+  ORDER_QUEUE,
+  PaymentChannel,
+  PaymentStatus,
+} from './order.constant';
 
 @Injectable()
 export class OrderService {
+  /** 待支付超时毫秒数（下单后 delay 这么久自动取消） */
+  private readonly payTimeoutMs: number;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(PAYMENT_SERVICE) private readonly payment: PaymentService,
-  ) {}
+    @InjectQueue(ORDER_QUEUE) private readonly orderQueue: Queue,
+    configService: ConfigService,
+  ) {
+    this.payTimeoutMs =
+      Number(configService.get('ORDER_PAY_TIMEOUT_SECONDS', DEFAULT_PAY_TIMEOUT_SECONDS)) * 1000;
+  }
 
   async create(userId: number, dto: CreateOrderDto) {
     const address = await this.prisma.userAddress.findUnique({ where: { id: dto.addressId } });
@@ -100,6 +118,13 @@ export class OrderService {
       return order.id;
     });
 
+    // 塞一个延迟任务：到点仍未支付则自动取消（失败不阻断下单，仅记日志）
+    try {
+      await this.orderQueue.add(AUTO_CANCEL_JOB, { orderId }, { delay: this.payTimeoutMs });
+    } catch (e) {
+      console.warn('[order] 自动取消任务入队失败，订单需手动取消兜底:', e);
+    }
+
     return { id: orderId, orderNo };
   }
 
@@ -139,6 +164,19 @@ export class OrderService {
     if (order.status !== OrderStatus.PENDING_PAYMENT) {
       throw new BusinessException(ErrorCode.ORDER_STATE_INVALID, '仅待支付订单可取消');
     }
+    await this.cancelPendingOrder(orderId);
+    return null;
+  }
+
+  /**
+   * 核心取消动作：不依赖 userId，用户手动取消和定时/延迟自动取消共用。
+   * 幂等：非待支付（已支付/已取消/不存在）直接跳过，防止重复取消或误取消已支付订单。
+   */
+  async cancelPendingOrder(orderId: number) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order || order.status !== OrderStatus.PENDING_PAYMENT) {
+      return;
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.order.update({
@@ -154,8 +192,6 @@ export class OrderService {
         });
       }
     });
-
-    return null;
   }
 
   async confirm(userId: number, orderId: number) {
@@ -200,6 +236,7 @@ export class OrderService {
         firstImage: o.items[0]?.productImage ?? null,
         firstName: o.items[0]?.productName ?? '',
         createdAt: o.createdAt,
+        payExpireAt: this.payExpireAt(o.createdAt),
       })),
       total,
       page,
@@ -228,7 +265,7 @@ export class OrderService {
     if (!order || order.userId !== userId) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '订单不存在');
     }
-    return order;
+    return { ...order, payExpireAt: this.payExpireAt(order.createdAt) };
   }
 
   // ---------- 管理端 ----------
@@ -310,6 +347,11 @@ export class OrderService {
     detail: string;
   }): string {
     return `${a.province}${a.city}${a.district}${a.detail}`;
+  }
+
+  /** 支付截止时间：下单时间 + 超时时长（供 H5 展示倒计时） */
+  private payExpireAt(createdAt: Date): Date {
+    return new Date(createdAt.getTime() + this.payTimeoutMs);
   }
 
   private specText(
