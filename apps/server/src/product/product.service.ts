@@ -11,12 +11,15 @@ import {
   UpdateSkuDto,
 } from './dto/product.dto';
 import { CategoryService } from './category.service';
+import { RedisService } from '../redis/redis.service';
+import { CACHE_TTL_SECONDS, productDetailKey } from '../common/cache.constant';
 
 @Injectable()
 export class ProductService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly categoryService: CategoryService,
+    private readonly redisService: RedisService,
   ) {}
 
   async list(query: ListProductDto) {
@@ -204,6 +207,8 @@ export class ProductService {
     }
 
     await this.prisma.product.update({ where: { id }, data });
+    // 失效该商品详情缓存，管理端改动秒级对 C 端生效（漏删由 TTL 兜底）
+    await this.redisService.tryDel(productDetailKey(id));
     return { id };
   }
 
@@ -211,11 +216,12 @@ export class ProductService {
     await this.ensureProduct(id);
     // 软删除：保留订单/购物车的历史关联
     await this.prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.redisService.tryDel(productDetailKey(id));
     return null;
   }
 
   async updateSku(skuId: number, dto: UpdateSkuDto) {
-    await this.ensureSku(skuId);
+    const sku = await this.ensureSku(skuId);
     const data: Prisma.ProductSkuUpdateInput = {};
     if (dto.price !== undefined) data.price = dto.price;
     if (dto.originalPrice !== undefined) data.originalPrice = dto.originalPrice;
@@ -223,21 +229,28 @@ export class ProductService {
     if (dto.skuCode !== undefined) data.skuCode = dto.skuCode;
     if (dto.image !== undefined) data.image = dto.image;
     if (dto.status !== undefined) data.status = dto.status;
-    return this.prisma.productSku.update({
+    const result = await this.prisma.productSku.update({
       where: { id: skuId },
       data,
       select: { id: true, price: true, stock: true },
     });
+    // SKU 价格/库存/上下架都会体现在商品详情里，失效所属商品缓存
+    await this.redisService.tryDel(productDetailKey(sku.productId));
+    return result;
   }
 
   /** 批量更新 SKU：一次事务提交，要么全成功要么全回滚，避免「改一半」 */
   async batchUpdateSkus(dto: BatchUpdateSkuDto) {
-    // 先校验所有 SKU 都存在，避免事务跑到一半才报「不存在」
+    // 先校验所有 SKU 都存在，避免事务跑到一半才报「不存在」；顺便拿到所属商品 id 用于失效缓存
     const ids = [...new Set(dto.skus.map((s) => s.id))];
-    const found = await this.prisma.productSku.count({ where: { id: { in: ids } } });
-    if (found !== ids.length) {
+    const skus = await this.prisma.productSku.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, productId: true },
+    });
+    if (skus.length !== ids.length) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '存在无效的 SKU');
     }
+    const productIds = [...new Set(skus.map((s) => s.productId))];
 
     await this.prisma.$transaction(
       dto.skus.map((s) => {
@@ -251,11 +264,18 @@ export class ProductService {
         return this.prisma.productSku.update({ where: { id: s.id }, data });
       }),
     );
+
+    // 涉及的 SKU 分属不同商品，逐一失效对应商品详情缓存
+    await Promise.all(productIds.map((pid) => this.redisService.tryDel(productDetailKey(pid))));
     return null;
   }
 
-  /** 商品完整详情：分类/品牌 + 轮播图 + 规格组→值 + SKU（含规格组合） */
+  /** 商品完整详情：分类/品牌 + 轮播图 + 规格组→值 + SKU（含规格组合），带缓存 */
   private async getDetail(productId: number) {
+    const cacheKey = productDetailKey(productId);
+    const cached = await this.redisService.getJSON(cacheKey);
+    if (cached) return cached;
+
     const product = await this.prisma.product.findUniqueOrThrow({
       where: { id: productId },
       include: {
@@ -279,7 +299,7 @@ export class ProductService {
       },
     });
 
-    return {
+    const detail = {
       ...product,
       skus: product.skus.map((sku) => ({
         id: sku.id,
@@ -298,6 +318,9 @@ export class ProductService {
         })),
       })),
     };
+
+    await this.redisService.setJSON(cacheKey, detail, CACHE_TTL_SECONDS);
+    return detail;
   }
 
   /** 笛卡尔积：[[a,b],[1,2]] → [[a,1],[a,2],[b,1],[b,2]]；空数组 → [[]] */

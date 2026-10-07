@@ -4,6 +4,12 @@ import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
+import { RedisService } from '../redis/redis.service';
+import {
+  CACHE_TTL_SECONDS,
+  categoryTreeAllKey,
+  categoryTreeEnabledKey,
+} from '../common/cache.constant';
 
 export interface CategoryNode {
   id: number;
@@ -20,15 +26,24 @@ export interface CategoryNode {
 
 @Injectable()
 export class CategoryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redisService: RedisService,
+  ) {}
 
-  /** 分类树（未删除的；onlyEnabled 时只返回启用分类） */
+  /** 分类树（未删除的；onlyEnabled 时只返回启用分类），带缓存 */
   async getTree(onlyEnabled = false): Promise<CategoryNode[]> {
+    const cacheKey = onlyEnabled ? categoryTreeEnabledKey : categoryTreeAllKey;
+    const cached = await this.redisService.getJSON<CategoryNode[]>(cacheKey);
+    if (cached) return cached;
+
     const list = await this.prisma.category.findMany({
       where: { deletedAt: null, ...(onlyEnabled ? { status: 1 } : {}) },
       orderBy: [{ sort: 'asc' }, { id: 'asc' }],
     });
-    return this.buildTree(list);
+    const tree = this.buildTree(list);
+    await this.redisService.setJSON(cacheKey, tree, CACHE_TTL_SECONDS);
+    return tree;
   }
 
   /** 收集某分类及其全部后代的 id（用于「按父分类查所有子分类商品」） */
@@ -65,7 +80,7 @@ export class CategoryService {
       }
     }
 
-    return this.prisma.category.create({
+    const result = await this.prisma.category.create({
       data: {
         name: dto.name,
         parentId: dto.parentId ?? null,
@@ -76,6 +91,8 @@ export class CategoryService {
       },
       select: { id: true, name: true, parentId: true, level: true },
     });
+    await this.invalidateCategoryCache();
+    return result;
   }
 
   async update(id: number, dto: UpdateCategoryDto) {
@@ -85,7 +102,9 @@ export class CategoryService {
     if (dto.icon !== undefined) data.icon = dto.icon;
     if (dto.sort !== undefined) data.sort = dto.sort;
     if (dto.status !== undefined) data.status = dto.status;
-    return this.prisma.category.update({ where: { id }, data, select: { id: true } });
+    const result = await this.prisma.category.update({ where: { id }, data, select: { id: true } });
+    await this.invalidateCategoryCache();
+    return result;
   }
 
   async remove(id: number) {
@@ -104,7 +123,14 @@ export class CategoryService {
     }
     // 软删除：保留数据，避免破坏商品/订单的历史关联
     await this.prisma.category.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.invalidateCategoryCache();
     return null;
+  }
+
+  /** 分类增删改后，同时失效两份分类树缓存（管理端全量 + 商城端启用） */
+  private async invalidateCategoryCache() {
+    await this.redisService.tryDel(categoryTreeAllKey);
+    await this.redisService.tryDel(categoryTreeEnabledKey);
   }
 
   private async ensureCategory(id: number): Promise<Category> {

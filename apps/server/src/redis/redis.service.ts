@@ -3,8 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
 /**
- * Redis 封装：目前只用于 refreshToken 的存取（登出失效 / 刷新轮换）。
- * 后续阶段（购物车缓存、验证码等）可继续扩展。
+ * Redis 封装：refreshToken 存取（登出失效 / 刷新轮换）+ 通用缓存（getJSON/setJSON/tryDel）。
  */
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -37,5 +36,33 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async del(key: string): Promise<void> {
     await this.client.del(key);
+  }
+
+  /** 读缓存对象：JSON 反序列化；读失败/缺失按 miss 处理（返回 null，走数据库） */
+  async getJSON<T = any>(key: string): Promise<T | null> {
+    try {
+      const raw = await this.get(key);
+      return raw ? (JSON.parse(raw) as T) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** 写缓存对象：JSON 序列化；失败仅告警不阻断主流程（一致性靠 TTL 兜底） */
+  async setJSON(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
+    try {
+      await this.set(key, JSON.stringify(value), ttlSeconds);
+    } catch (e) {
+      console.warn('[redis] 缓存写入失败，忽略（由 TTL 兜底）:', e);
+    }
+  }
+
+  /** 尽力删除：缓存失效是尽力而为，失败不抛错（漏删由 TTL 兜底） */
+  async tryDel(key: string): Promise<void> {
+    try {
+      await this.del(key);
+    } catch (e) {
+      console.warn('[redis] 缓存删除失败，忽略（由 TTL 兜底）:', e);
+    }
   }
 }
