@@ -13,6 +13,7 @@ import { ProductModule } from './product/product.module';
 import { StorageModule } from './storage/storage.module';
 import { PaymentModule } from './payment/payment.module';
 import { TradeModule } from './trade/trade.module';
+import { StatsModule } from './stats/stats.module';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 
 @Module({
@@ -38,6 +39,7 @@ import { LoggingMiddleware } from './common/middleware/logging.middleware';
     StorageModule,
     PaymentModule,
     TradeModule,
+    StatsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

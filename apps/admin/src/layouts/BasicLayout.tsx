@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
 import { App, Avatar, Dropdown, Layout, Menu, Space, Typography } from 'antd';
 import type { MenuProps } from 'antd';
-import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
+import { HomeOutlined, LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import * as Icons from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/auth';
@@ -56,7 +56,14 @@ export default function BasicLayout() {
   const [collapsed, setCollapsed] = useState(false);
 
   const menus = useMemo(() => user?.menus ?? [], [user?.menus]);
-  const menuItems = useMemo(() => toMenuItems(menus), [menus]);
+  const menuItems = useMemo<NonNullable<MenuProps['items']>>(
+    () => [
+      // 首页固定项：看板是登录后的落地页，不属于 RBAC 菜单树，对所有管理员始终可见
+      { key: '/dashboard', icon: <HomeOutlined />, label: '首页' },
+      ...toMenuItems(menus),
+    ],
+    [menus],
+  );
 
   // 默认展开当前路由所属的父级
   const [openKeys, setOpenKeys] = useState<string[]>(
@@ -87,7 +94,7 @@ export default function BasicLayout() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ height: '100vh' }}>
       <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed}>
         <div
           style={{
@@ -106,7 +113,7 @@ export default function BasicLayout() {
           theme="dark"
           mode="inline"
           selectedKeys={[location.pathname]}
-          openKeys={collapsed ? [] : openKeys}
+          openKeys={openKeys}
           onOpenChange={onOpenChange}
           items={menuItems}
           onClick={onMenuClick}
@@ -140,7 +147,7 @@ export default function BasicLayout() {
             </Space>
           </Dropdown>
         </Header>
-        <Content style={{ margin: 16 }}>
+        <Content style={{ padding: 16, overflow: 'auto' }}>
           <Outlet />
         </Content>
       </Layout>
