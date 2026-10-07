@@ -37,6 +37,13 @@ request.interceptors.request.use((config) => {
 request.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
+    const traceId = error.response?.headers['x-request-id'] as string | undefined;
+    const method = error.config?.method?.toUpperCase() ?? '';
+    console.error(
+      `[api] ${method} ${error.config?.url} 失败 ${error.response?.status ?? ''}${
+        traceId ? ` traceId=${traceId}` : ''
+      }`,
+    );
     const code = (error.response?.data as { code?: number } | undefined)?.code;
     const original = error.config as RetriableConfig | undefined;
 

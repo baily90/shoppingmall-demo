@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, List, NavBar, Popup, TextArea, Toast } from 'antd-mobile';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createOrder, listAddresses } from '../api/trade';
@@ -27,6 +27,8 @@ export default function Checkout() {
   const [addrPopup, setAddrPopup] = useState(false);
   const [remark, setRemark] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // 幂等键：本次结算页生成一次，重复点击「提交订单」复用同一 key，后端据此去重
+  const idempotencyKey = useRef(crypto.randomUUID()).current;
 
   useEffect(() => {
     void (async () => {
@@ -57,6 +59,7 @@ export default function Checkout() {
         addressId: selectedAddrId,
         items: items.map((i) => ({ skuId: i.skuId, quantity: i.quantity })),
         remark: remark || undefined,
+        idempotencyKey,
       });
       Toast.show({ content: '下单成功', icon: 'success' });
       navigate(`/order/${res.data.data.id}`, { replace: true });

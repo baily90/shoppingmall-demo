@@ -119,6 +119,7 @@ model UserAddress {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("user_address")
 }
 
@@ -178,6 +179,9 @@ model Product {
   skus       ProductSku[]
   images     ProductImage[]
 
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([status])
   @@map("product")
 }
 
@@ -226,6 +230,7 @@ model ProductSku {
   carts      Cart[]
   orderItems OrderItem[]
 
+  @@index([productId])
   @@map("product_sku")
 }
 
@@ -275,6 +280,7 @@ model Cart {
 model Order {
   id               Int       @id @default(autoincrement())
   orderNo          String    @unique @map("order_no")
+  idempotencyKey   String?   @unique @map("idempotency_key")
   userId           Int       @map("user_id")
   totalAmount      Int       @map("total_amount")
   freightAmount    Int       @default(0) @map("freight_amount")
@@ -297,6 +303,8 @@ model Order {
   items    OrderItem[]
   payments Payment[]
 
+  @@index([userId, status])
+  @@index([status])
   @@map("orders")
 }
 
@@ -317,6 +325,8 @@ model OrderItem {
   order Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   sku   ProductSku @relation(fields: [skuId], references: [id])
 
+  @@index([orderId])
+  @@index([skuId])
   @@map("order_items")
 }
 
@@ -335,5 +345,6 @@ model Payment {
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([orderId])
   @@map("payment")
 }

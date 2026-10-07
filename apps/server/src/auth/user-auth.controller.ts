@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserJwtAuthGuard } from '../common/guards/user-jwt-auth.guard';
 import { CurrentUser, UserContext } from '../common/decorators/current-user.decorator';
 import { RegisterDto } from './dto/register.dto';
@@ -10,11 +11,13 @@ import { UserAuthService } from './user-auth.service';
 export class UserAuthController {
   constructor(private readonly userAuthService: UserAuthService) {}
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.userAuthService.register(dto);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   login(@Body() dto: UserLoginDto) {
     return this.userAuthService.login(dto);

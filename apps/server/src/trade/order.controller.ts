@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserJwtAuthGuard } from '../common/guards/user-jwt-auth.guard';
 import { CurrentUser, UserContext } from '../common/decorators/current-user.decorator';
 import { OrderService } from './order.service';
@@ -9,6 +10,7 @@ import { CreateOrderDto, ListOrderDto } from './dto/order.dto';
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post()
   create(@CurrentUser() user: UserContext, @Body() dto: CreateOrderDto) {
     return this.orderService.create(user.id, dto);

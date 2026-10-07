@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
@@ -33,6 +33,16 @@ export class OrderService {
   }
 
   async create(userId: number, dto: CreateOrderDto) {
+    // 幂等：同一 idempotencyKey 重复提交（如双击/重试）直接返回已有订单，不重复扣库存
+    if (dto.idempotencyKey) {
+      const existing = await this.prisma.order.findUnique({
+        where: { idempotencyKey: dto.idempotencyKey },
+      });
+      if (existing) {
+        return { id: existing.id, orderNo: existing.orderNo };
+      }
+    }
+
     const address = await this.prisma.userAddress.findUnique({ where: { id: dto.addressId } });
     if (!address || address.userId !== userId) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '收货地址不存在');
@@ -62,61 +72,80 @@ export class OrderService {
     const orderNo = this.genNo('NO');
     const receiverAddress = this.joinAddress(address);
 
-    const orderId = await this.prisma.$transaction(async (tx) => {
-      let total = 0;
-      for (const [skuId, qty] of qtyMap) {
-        const sku = skuMap.get(skuId)!;
-        if (sku.status !== 1 || sku.product.status !== 1 || sku.product.deletedAt) {
-          throw new BusinessException(ErrorCode.NOT_ALLOWED, `「${sku.product.name}」已下架`);
-        }
-        // 原子扣库存：库存不足时 count=0 → 抛错整体回滚，防止超卖
-        const res = await tx.productSku.updateMany({
-          where: { id: skuId, stock: { gte: qty } },
-          data: { stock: { decrement: qty } },
-        });
-        if (res.count === 0) {
-          throw new BusinessException(ErrorCode.OUT_OF_STOCK, `「${sku.product.name}」库存不足`);
-        }
-        total += sku.price * qty;
-      }
-
-      const order = await tx.order.create({
-        data: {
-          orderNo,
-          userId,
-          totalAmount: total,
-          freightAmount: 0,
-          payAmount: total,
-          status: OrderStatus.PENDING_PAYMENT,
-          receiverName: address.receiverName,
-          receiverPhone: address.receiverPhone,
-          receiverAddress,
-          remark: dto.remark ?? null,
-        },
-      });
-
-      await tx.orderItem.createMany({
-        data: [...qtyMap].map(([skuId, qty]) => {
+    let orderId: number;
+    try {
+      orderId = await this.prisma.$transaction(async (tx) => {
+        let total = 0;
+        for (const [skuId, qty] of qtyMap) {
           const sku = skuMap.get(skuId)!;
-          return {
-            orderId: order.id,
-            skuId,
-            productId: sku.product.id,
-            productName: sku.product.name,
-            skuSpec: this.specText(sku.specValues),
-            productImage: sku.image ?? sku.product.mainImage,
-            price: sku.price,
-            quantity: qty,
-            totalAmount: sku.price * qty,
-          };
-        }),
+          if (sku.status !== 1 || sku.product.status !== 1 || sku.product.deletedAt) {
+            throw new BusinessException(ErrorCode.NOT_ALLOWED, `「${sku.product.name}」已下架`);
+          }
+          // 原子扣库存：库存不足时 count=0 → 抛错整体回滚，防止超卖
+          const res = await tx.productSku.updateMany({
+            where: { id: skuId, stock: { gte: qty } },
+            data: { stock: { decrement: qty } },
+          });
+          if (res.count === 0) {
+            throw new BusinessException(ErrorCode.OUT_OF_STOCK, `「${sku.product.name}」库存不足`);
+          }
+          total += sku.price * qty;
+        }
+
+        const order = await tx.order.create({
+          data: {
+            orderNo,
+            userId,
+            idempotencyKey: dto.idempotencyKey ?? null,
+            totalAmount: total,
+            freightAmount: 0,
+            payAmount: total,
+            status: OrderStatus.PENDING_PAYMENT,
+            receiverName: address.receiverName,
+            receiverPhone: address.receiverPhone,
+            receiverAddress,
+            remark: dto.remark ?? null,
+          },
+        });
+
+        await tx.orderItem.createMany({
+          data: [...qtyMap].map(([skuId, qty]) => {
+            const sku = skuMap.get(skuId)!;
+            return {
+              orderId: order.id,
+              skuId,
+              productId: sku.product.id,
+              productName: sku.product.name,
+              skuSpec: this.specText(sku.specValues),
+              productImage: sku.image ?? sku.product.mainImage,
+              price: sku.price,
+              quantity: qty,
+              totalAmount: sku.price * qty,
+            };
+          }),
+        });
+
+        // 下单成功后清掉购物车里这些 SKU（覆盖「购物车结算」和「立即购买」两个入口）
+        await tx.cart.deleteMany({ where: { userId, skuId: { in: skuIds } } });
+
+        return order.id;
       });
-
-      // 下单成功后清掉购物车里这些 SKU（覆盖「购物车结算」和「立即购买」两个入口）
-      await tx.cart.deleteMany({ where: { userId, skuId: { in: skuIds } } });
-
-      return order.id;
-    });
+    } catch (e) {
+      // 并发下同一幂等键同时提交：唯一键冲突后回读已创建订单，视为成功（幂等）
+      if (
+        dto.idempotencyKey &&
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        const existing = await this.prisma.order.findUnique({
+          where: { idempotencyKey: dto.idempotencyKey },
+        });
+        if (existing) {
+          return { id: existing.id, orderNo: existing.orderNo };
+        }
+      }
+      throw e;
+    }
 
     // 塞一个延迟任务：到点仍未支付则自动取消（失败不阻断下单，仅记日志）
     try {
@@ -137,7 +166,15 @@ export class OrderService {
     const paymentNo = this.genNo('P');
     const { transactionId } = await this.payment.createPayment(order.orderNo, order.payAmount);
 
+    let paid = false;
     await this.prisma.$transaction(async (tx) => {
+      // 乐观锁：仅当订单仍为待支付时才置为已支付，防止并发重复支付 / 与自动取消竞态
+      const res = await tx.order.updateMany({
+        where: { id: orderId, status: OrderStatus.PENDING_PAYMENT },
+        data: { status: OrderStatus.PAID, paidAt: new Date() },
+      });
+      if (res.count === 0) return; // 已被取消/已支付，放弃，不落支付记录
+      paid = true;
       await tx.payment.create({
         data: {
           paymentNo,
@@ -150,39 +187,36 @@ export class OrderService {
           paidAt: new Date(),
         },
       });
-      await tx.order.update({
-        where: { id: orderId },
-        data: { status: OrderStatus.PAID, paidAt: new Date() },
-      });
     });
 
+    if (!paid) {
+      throw new BusinessException(ErrorCode.ORDER_STATE_INVALID, '订单当前状态不可支付');
+    }
     return null;
   }
 
   async cancel(userId: number, orderId: number) {
-    const order = await this.ensureOwn(userId, orderId);
-    if (order.status !== OrderStatus.PENDING_PAYMENT) {
+    await this.ensureOwn(userId, orderId);
+    const canceled = await this.cancelPendingOrder(orderId);
+    if (!canceled) {
       throw new BusinessException(ErrorCode.ORDER_STATE_INVALID, '仅待支付订单可取消');
     }
-    await this.cancelPendingOrder(orderId);
     return null;
   }
 
   /**
    * 核心取消动作：不依赖 userId，用户手动取消和定时/延迟自动取消共用。
-   * 幂等：非待支付（已支付/已取消/不存在）直接跳过，防止重复取消或误取消已支付订单。
+   * 乐观锁：仅当订单仍为「待支付」时才取消并释放库存，返回是否真正取消。
+   * 与「支付」并发时靠 where 里的 status 判断，两个动作只会有一个成功（幂等）。
    */
-  async cancelPendingOrder(orderId: number) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
-    if (!order || order.status !== OrderStatus.PENDING_PAYMENT) {
-      return;
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.order.update({
-        where: { id: orderId },
+  async cancelPendingOrder(orderId: number): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const res = await tx.order.updateMany({
+        where: { id: orderId, status: OrderStatus.PENDING_PAYMENT },
         data: { status: OrderStatus.CANCELED, canceledAt: new Date() },
       });
+      if (res.count === 0) return false; // 已支付/已取消/不存在，跳过
+
       // 释放下单时扣掉的库存
       const items = await tx.orderItem.findMany({ where: { orderId } });
       for (const it of items) {
@@ -191,6 +225,7 @@ export class OrderService {
           data: { stock: { increment: it.quantity } },
         });
       }
+      return true;
     });
   }
 

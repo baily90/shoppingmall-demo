@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AdminJwtAuthGuard } from '../common/guards/admin-jwt-auth.guard';
 import { CurrentAdmin, AdminContext } from '../common/decorators/current-user.decorator';
 import { AdminLoginDto } from './dto/admin-login.dto';
@@ -9,6 +10,7 @@ import { AdminAuthService } from './admin-auth.service';
 export class AdminAuthController {
   constructor(private readonly adminAuthService: AdminAuthService) {}
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   login(@Body() dto: AdminLoginDto) {
     return this.adminAuthService.login(dto);

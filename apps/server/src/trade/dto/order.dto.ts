@@ -35,6 +35,12 @@ export class CreateOrderDto {
   @IsString()
   @MaxLength(200, { message: '备注最多 200 字' })
   remark?: string;
+
+  /** 幂等键：同一 key 重复提交（如双击）只建一单，防重复下单 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64, { message: '幂等键最多 64 字' })
+  idempotencyKey?: string;
 }
 
 /** 订单列表查询：分页 + 状态过滤（keyword 用于订单号搜索） */
