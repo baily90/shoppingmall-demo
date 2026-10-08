@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { PaymentModule } from '../payment/payment.module';
+import { CouponModule } from '../coupon/coupon.module';
 import { AddressController } from './address.controller';
 import { AddressService } from './address.service';
 import { CartController } from './cart.controller';
@@ -12,7 +13,7 @@ import { OrderProcessor } from './order.processor';
 import { ORDER_QUEUE } from './order.constant';
 
 @Module({
-  imports: [PaymentModule, BullModule.registerQueue({ name: ORDER_QUEUE })],
+  imports: [PaymentModule, CouponModule, BullModule.registerQueue({ name: ORDER_QUEUE })],
   controllers: [AddressController, CartController, OrderController, AdminOrderController],
   providers: [AddressService, CartService, OrderService, OrderProcessor],
 })

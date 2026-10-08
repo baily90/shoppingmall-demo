@@ -134,6 +134,29 @@ const permissionDefs: PermDef[] = [
       },
     ],
   },
+  {
+    code: 'marketing',
+    name: '营销管理',
+    type: 1,
+    path: '/marketing',
+    icon: 'GiftOutlined',
+    sort: 4,
+    children: [
+      {
+        code: 'coupon:list',
+        name: '优惠券管理',
+        type: 2,
+        path: '/marketing/coupon',
+        icon: 'GiftOutlined',
+        sort: 1,
+        children: [
+          { code: 'coupon:create', name: '新增优惠券', type: 3, sort: 1 },
+          { code: 'coupon:update', name: '编辑优惠券', type: 3, sort: 2 },
+          { code: 'coupon:delete', name: '删除优惠券', type: 3, sort: 3 },
+        ],
+      },
+    ],
+  },
 ];
 
 async function createPermission(

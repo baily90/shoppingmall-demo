@@ -9,6 +9,8 @@ import AddressEdit from './pages/address-edit';
 import Orders from './pages/orders';
 import OrderDetailPage from './pages/order-detail';
 import Mine from './pages/mine';
+import Coupons from './pages/coupons';
+import CouponMine from './pages/coupon-mine';
 import RequireAuth from './components/RequireAuth';
 
 const router = createBrowserRouter([
@@ -16,6 +18,15 @@ const router = createBrowserRouter([
   { path: '/list', element: <Navigate to="/" replace /> },
   { path: '/product/:id', element: <Detail /> },
   { path: '/login', element: <Login /> },
+  { path: '/coupons', element: <Coupons /> },
+  {
+    path: '/coupons/mine',
+    element: (
+      <RequireAuth>
+        <CouponMine />
+      </RequireAuth>
+    ),
+  },
   {
     path: '/cart',
     element: (

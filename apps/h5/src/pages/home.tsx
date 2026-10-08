@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavBar, SearchBar, Toast } from 'antd-mobile';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { listBrands, listCategories, listProducts } from '../api/store';
 import type { BrandRow, CategoryNode, StoreProductRow } from '../api/store';
 import { getErrorMessage } from '../api/request';
@@ -12,6 +12,7 @@ const PAGE_SIZE = 10;
 
 // 首页即商品列表页：分类/品牌/关键词筛选 + 分页加载，底部 TabBar 常驻
 export default function Home() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryId = searchParams.get('categoryId');
   const categoryIdNum = categoryId ? Number(categoryId) : undefined;
@@ -101,6 +102,10 @@ export default function Home() {
   return (
     <div className="page tab-page">
       <NavBar back={null}>商城</NavBar>
+      <div className="coupon-entry" onClick={() => navigate('/coupons')}>
+        <span>🎁 领券中心</span>
+        <span className="coupon-entry-arrow">›</span>
+      </div>
       <SearchBar
         placeholder="搜索商品"
         defaultValue={keyword}

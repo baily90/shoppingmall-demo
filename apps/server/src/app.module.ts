@@ -14,6 +14,7 @@ import { StorageModule } from './storage/storage.module';
 import { PaymentModule } from './payment/payment.module';
 import { TradeModule } from './trade/trade.module';
 import { StatsModule } from './stats/stats.module';
+import { CouponModule } from './coupon/coupon.module';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 
 @Module({
@@ -40,6 +41,7 @@ import { LoggingMiddleware } from './common/middleware/logging.middleware';
     PaymentModule,
     TradeModule,
     StatsModule,
+    CouponModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

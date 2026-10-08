@@ -41,6 +41,11 @@ export class CreateOrderDto {
   @IsString()
   @MaxLength(64, { message: '幂等键最多 64 字' })
   idempotencyKey?: string;
+
+  /** 选用的用户券 id（UserCoupon.id，一单一券），不传则不使用优惠 */
+  @IsOptional()
+  @IsInt({ message: '优惠券 id 必须为整数' })
+  couponId?: number;
 }
 
 /** 订单列表查询：分页 + 状态过滤（keyword 用于订单号搜索） */

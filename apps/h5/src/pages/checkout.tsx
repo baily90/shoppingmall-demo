@@ -3,9 +3,12 @@ import { Button, List, NavBar, Popup, TextArea, Toast } from 'antd-mobile';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createOrder, listAddresses } from '../api/trade';
 import type { Address } from '../api/trade';
+import { listMyCoupons, computeDiscount } from '../api/coupon';
+import type { MyCoupon } from '../api/coupon';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
 import { useCartCount } from '../store/cart';
+import CouponCard from '../components/CouponCard';
 
 interface CheckoutItem {
   skuId: number;
@@ -27,6 +30,10 @@ export default function Checkout() {
   const [addrPopup, setAddrPopup] = useState(false);
   const [remark, setRemark] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // 优惠券相关
+  const [myCoupons, setMyCoupons] = useState<MyCoupon[]>([]);
+  const [selectedCouponId, setSelectedCouponId] = useState<number | undefined>();
+  const [couponPopup, setCouponPopup] = useState(false);
   // 幂等键：本次结算页生成一次，重复点击「提交订单」复用同一 key，后端据此去重
   const idempotencyKey = useRef(crypto.randomUUID()).current;
 
@@ -43,9 +50,45 @@ export default function Checkout() {
     })();
   }, []);
 
+  useEffect(() => {
+    listMyCoupons()
+      .then((res) => setMyCoupons(res.data.data))
+      .catch(() => {});
+  }, []);
+
   const selectedAddr = addresses.find((a) => a.id === selectedAddrId);
   const totalPrice = useMemo(() => items.reduce((s, i) => s + i.price * i.quantity, 0), [items]);
   const totalCount = useMemo(() => items.reduce((s, i) => s + i.quantity, 0), [items]);
+
+  // 可用券：未使用 + 未过期 + 满足门槛，按优惠金额从高到低排序
+  const usableCoupons = useMemo(
+    () =>
+      myCoupons
+        .filter((c) => c.status === 1 && !c.expired && c.coupon.thresholdAmount <= totalPrice)
+        .sort(
+          (a, b) => computeDiscount(b.coupon, totalPrice) - computeDiscount(a.coupon, totalPrice),
+        ),
+    [myCoupons, totalPrice],
+  );
+
+  // 默认选中最高优惠（行业惯例）；用户手动选「不使用」后不再自动覆盖
+  const [autoPicked, setAutoPicked] = useState(false);
+  useEffect(() => {
+    if (!autoPicked && usableCoupons.length > 0) {
+      setSelectedCouponId(usableCoupons[0].id);
+      setAutoPicked(true);
+    }
+  }, [usableCoupons, autoPicked]);
+
+  const selectedCoupon = useMemo(
+    () => myCoupons.find((c) => c.id === selectedCouponId),
+    [myCoupons, selectedCouponId],
+  );
+  const discount = useMemo(
+    () =>
+      selectedCoupon ? Math.min(computeDiscount(selectedCoupon.coupon, totalPrice), totalPrice) : 0,
+    [selectedCoupon, totalPrice],
+  );
 
   const submit = async () => {
     if (!selectedAddrId) {
@@ -59,6 +102,7 @@ export default function Checkout() {
         addressId: selectedAddrId,
         items: items.map((i) => ({ skuId: i.skuId, quantity: i.quantity })),
         remark: remark || undefined,
+        couponId: selectedCouponId,
         idempotencyKey,
       });
       Toast.show({ content: '下单成功', icon: 'success' });
@@ -122,6 +166,21 @@ export default function Checkout() {
         ))}
       </div>
 
+      {/* 优惠券 */}
+      <div className="checkout-block" onClick={() => setCouponPopup(true)}>
+        <div className="checkout-coupon-row">
+          <span>优惠券</span>
+          <span className="checkout-coupon-value">
+            {selectedCoupon
+              ? `-${formatPrice(discount)}`
+              : usableCoupons.length > 0
+                ? `${usableCoupons.length} 张可用`
+                : '暂无可用'}
+            <span className="addr-arrow">›</span>
+          </span>
+        </div>
+      </div>
+
       {/* 备注 */}
       <div className="checkout-block">
         <TextArea
@@ -136,7 +195,8 @@ export default function Checkout() {
       {/* 底部结算栏 */}
       <div className="checkout-footer">
         <div className="checkout-total">
-          共 {totalCount} 件，合计：<span className="price">{formatPrice(totalPrice)}</span>
+          共 {totalCount} 件{discount > 0 && <span>，已优惠 {formatPrice(discount)}</span>}
+          ，合计：<span className="price">{formatPrice(totalPrice - discount)}</span>
         </div>
         <Button color="primary" loading={submitting} onClick={() => void submit()}>
           提交订单
@@ -193,6 +253,46 @@ export default function Checkout() {
             ))
           )}
         </List>
+      </Popup>
+
+      {/* 优惠券选择弹层 */}
+      <Popup
+        visible={couponPopup}
+        onMaskClick={() => setCouponPopup(false)}
+        position="bottom"
+        bodyStyle={{ maxHeight: '70vh' }}
+      >
+        <div className="addr-pop-title">选择优惠券</div>
+        <div className="coupon-select">
+          <div
+            className="coupon-select-none"
+            onClick={() => {
+              setSelectedCouponId(undefined);
+              setCouponPopup(false);
+            }}
+          >
+            <span>不使用优惠券</span>
+            {selectedCouponId === undefined && <span className="addr-check">✓</span>}
+          </div>
+          {usableCoupons.length === 0 ? (
+            <div className="empty">暂无可用优惠券</div>
+          ) : (
+            usableCoupons.map((c) => (
+              <div
+                key={c.id}
+                className="coupon-select-item"
+                onClick={() => {
+                  setSelectedCouponId(c.id);
+                  setCouponPopup(false);
+                }}
+              >
+                <CouponCard coupon={c.coupon}>
+                  {c.id === selectedCouponId && <span className="addr-check">✓</span>}
+                </CouponCard>
+              </div>
+            ))
+          )}
+        </div>
       </Popup>
     </div>
   );

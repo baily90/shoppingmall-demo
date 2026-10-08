@@ -11,6 +11,7 @@ import CategoryList from '../pages/product/category';
 import BrandList from '../pages/product/brand';
 import ProductList from '../pages/product/product';
 import OrderList from '../pages/order/order';
+import CouponList from '../pages/marketing/coupon';
 import Forbidden from '../pages/403';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -91,6 +92,14 @@ export const router = createBrowserRouter([
         element: (
           <WithPermission permission="order:list">
             <OrderList />
+          </WithPermission>
+        ),
+      },
+      {
+        path: 'marketing/coupon',
+        element: (
+          <WithPermission permission="coupon:list">
+            <CouponList />
           </WithPermission>
         ),
       },

@@ -97,9 +97,10 @@ model User {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  addresses UserAddress[]
-  carts     Cart[]
-  orders    Order[]
+  addresses   UserAddress[]
+  carts       Cart[]
+  orders      Order[]
+  userCoupons UserCoupon[]
 
   @@map("user")
 }
@@ -290,6 +291,8 @@ model Order {
   receiverPhone    String    @map("receiver_phone")
   receiverAddress  String    @map("receiver_address")
   remark           String?
+  couponId         Int?      @map("coupon_id")
+  discountAmount   Int       @default(0) @map("discount_amount")
   logisticsCompany String?   @map("logistics_company")
   logisticsNo      String?   @map("logistics_no")
   paidAt           DateTime? @map("paid_at")
@@ -302,6 +305,7 @@ model Order {
   user     User        @relation(fields: [userId], references: [id])
   items    OrderItem[]
   payments Payment[]
+  userCoupon UserCoupon? @relation(fields: [couponId], references: [id])
 
   @@index([userId, status])
   @@index([status])
@@ -347,4 +351,49 @@ model Payment {
 
   @@index([orderId])
   @@map("payment")
+}
+
+// ============ 营销域 ============
+
+// 券模板：管理端定义规则，用户领取后落到 UserCoupon（每领一次一条）
+model Coupon {
+  id              Int       @id @default(autoincrement())
+  name            String
+  type            Int // 1=满减 2=折扣
+  thresholdAmount Int       @default(0) @map("threshold_amount") // 门槛（分），0=无门槛
+  discountAmount  Int       @default(0) @map("discount_amount") // 减免金额（分），满减券用
+  discountRate    Int       @default(0) @map("discount_rate") // 折扣率（如 85=85 折），折扣券用
+  totalStock      Int       @default(0) @map("total_stock") // 发行总量
+  receivedCount   Int       @default(0) @map("received_count") // 已领取数
+  perUserLimit    Int       @default(1) @map("per_user_limit") // 每人限领，0=不限
+  startTime       DateTime  @map("start_time")
+  endTime         DateTime  @map("end_time")
+  status          Int       @default(1) // 1=启用 0=停用
+  description     String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  userCoupons UserCoupon[]
+
+  @@map("coupon")
+}
+
+// 用户领到的券：领券时按模板复制一份，属于某个用户；状态机 1=未使用 2=已使用
+model UserCoupon {
+  id         Int       @id @default(autoincrement())
+  userId     Int       @map("user_id")
+  couponId   Int       @map("coupon_id")
+  status     Int       @default(1)
+  receivedAt DateTime  @default(now()) @map("received_at")
+  usedAt     DateTime? @map("used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  coupon Coupon  @relation(fields: [couponId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([userId, status])
+  @@index([couponId])
+  @@map("user_coupon")
 }

@@ -106,6 +106,7 @@ export interface CreateOrderPayload {
   addressId: number;
   items: { skuId: number; quantity: number }[];
   remark?: string;
+  couponId?: number;
   idempotencyKey?: string;
 }
 

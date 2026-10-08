@@ -7,6 +7,7 @@ import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { PAYMENT_SERVICE, PaymentService } from '../payment/payment.service';
+import { CouponService } from '../coupon/coupon.service';
 import { CreateOrderDto, ListOrderDto, ShipOrderDto } from './dto/order.dto';
 import {
   AUTO_CANCEL_JOB,
@@ -25,6 +26,7 @@ export class OrderService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(PAYMENT_SERVICE) private readonly payment: PaymentService,
+    private readonly couponService: CouponService,
     @InjectQueue(ORDER_QUEUE) private readonly orderQueue: Queue,
     configService: ConfigService,
   ) {
@@ -92,6 +94,13 @@ export class OrderService {
           total += sku.price * qty;
         }
 
+        // 选券：在本事务内校验并原子占用（任一后续步骤失败整体回滚，券的占用自动撤销）
+        let discountAmount = 0;
+        if (dto.couponId != null) {
+          const { discount } = await this.couponService.useInOrder(tx, userId, dto.couponId, total);
+          discountAmount = discount;
+        }
+
         const order = await tx.order.create({
           data: {
             orderNo,
@@ -99,7 +108,9 @@ export class OrderService {
             idempotencyKey: dto.idempotencyKey ?? null,
             totalAmount: total,
             freightAmount: 0,
-            payAmount: total,
+            payAmount: total - discountAmount,
+            couponId: dto.couponId ?? null,
+            discountAmount,
             status: OrderStatus.PENDING_PAYMENT,
             receiverName: address.receiverName,
             receiverPhone: address.receiverPhone,
@@ -211,6 +222,12 @@ export class OrderService {
    */
   async cancelPendingOrder(orderId: number): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        select: { couponId: true },
+      });
+      if (!order) return false;
+
       const res = await tx.order.updateMany({
         where: { id: orderId, status: OrderStatus.PENDING_PAYMENT },
         data: { status: OrderStatus.CANCELED, canceledAt: new Date() },
@@ -224,6 +241,11 @@ export class OrderService {
           where: { id: it.skuId },
           data: { stock: { increment: it.quantity } },
         });
+      }
+
+      // 回退优惠券（取消订单把已占用的券还给用户）
+      if (order.couponId) {
+        await this.couponService.refundInCancel(tx, order.couponId);
       }
       return true;
     });
@@ -267,6 +289,7 @@ export class OrderService {
         status: o.status,
         totalAmount: o.totalAmount,
         payAmount: o.payAmount,
+        discountAmount: o.discountAmount,
         itemCount: o.items.reduce((s, i) => s + i.quantity, 0),
         firstImage: o.items[0]?.productImage ?? null,
         firstName: o.items[0]?.productName ?? '',
@@ -295,7 +318,7 @@ export class OrderService {
   async detail(userId: number, orderId: number) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: true },
+      include: { items: true, userCoupon: { include: { coupon: true } } },
     });
     if (!order || order.userId !== userId) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '订单不存在');
@@ -337,6 +360,7 @@ export class OrderService {
       include: {
         items: true,
         user: { select: { id: true, phone: true, nickname: true } },
+        userCoupon: { include: { coupon: true } },
       },
     });
     if (!order) {
