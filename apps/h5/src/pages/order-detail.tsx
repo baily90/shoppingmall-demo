@@ -125,8 +125,25 @@ export default function OrderDetailPage() {
           </div>
         ))}
         <div className="od-total">
-          合计：<span className="price">{formatPrice(order.payAmount)}</span>
-          {order.freightAmount > 0 && `（含运费 ${formatPrice(order.freightAmount)}）`}
+          {order.discountAmount > 0 && (
+            <>
+              <div className="od-total-row">
+                <span className="od-total-lbl">商品总额</span>
+                {formatPrice(order.totalAmount)}
+              </div>
+              <div className="od-total-row od-total-discount">
+                <span className="od-total-lbl">
+                  优惠券（{order.userCoupon?.coupon.name ?? '优惠'}）
+                </span>
+                -{formatPrice(order.discountAmount)}
+              </div>
+            </>
+          )}
+          <div className="od-total-row od-total-final">
+            <span className="od-total-lbl">合计</span>
+            <span className="price">{formatPrice(order.payAmount)}</span>
+            {order.freightAmount > 0 && `（含运费 ${formatPrice(order.freightAmount)}）`}
+          </div>
         </div>
       </div>
 

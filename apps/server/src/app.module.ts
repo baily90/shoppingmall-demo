@@ -15,6 +15,7 @@ import { PaymentModule } from './payment/payment.module';
 import { TradeModule } from './trade/trade.module';
 import { StatsModule } from './stats/stats.module';
 import { CouponModule } from './coupon/coupon.module';
+import { SeckillModule } from './seckill/seckill.module';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 
 @Module({
@@ -42,6 +43,7 @@ import { LoggingMiddleware } from './common/middleware/logging.middleware';
     TradeModule,
     StatsModule,
     CouponModule,
+    SeckillModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

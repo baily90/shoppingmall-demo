@@ -254,10 +254,17 @@ export default function OrderList() {
             <Descriptions.Item label="物流">
               {detail.logisticsCompany ? `${detail.logisticsCompany} ${detail.logisticsNo}` : '-'}
             </Descriptions.Item>
-            <Descriptions.Item label="金额">
-              实付 ¥{centToYuan(detail.payAmount)}（商品 ¥{centToYuan(detail.totalAmount)} + 运费 ¥
-              {centToYuan(detail.freightAmount)}）
+            <Descriptions.Item label="商品金额">
+              ¥{centToYuan(detail.totalAmount)}
             </Descriptions.Item>
+            {detail.discountAmount > 0 && (
+              <Descriptions.Item label="优惠券">
+                -¥{centToYuan(detail.discountAmount)}
+                {detail.userCoupon?.coupon?.name ? `（${detail.userCoupon.coupon.name}）` : ''}
+              </Descriptions.Item>
+            )}
+            <Descriptions.Item label="运费">¥{centToYuan(detail.freightAmount)}</Descriptions.Item>
+            <Descriptions.Item label="实付">¥{centToYuan(detail.payAmount)}</Descriptions.Item>
             <Descriptions.Item label="下单时间">
               {detail.createdAt.slice(0, 19).replace('T', ' ')}
             </Descriptions.Item>

@@ -12,6 +12,7 @@ import BrandList from '../pages/product/brand';
 import ProductList from '../pages/product/product';
 import OrderList from '../pages/order/order';
 import CouponList from '../pages/marketing/coupon';
+import SeckillList from '../pages/marketing/seckill';
 import Forbidden from '../pages/403';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -100,6 +101,14 @@ export const router = createBrowserRouter([
         element: (
           <WithPermission permission="coupon:list">
             <CouponList />
+          </WithPermission>
+        ),
+      },
+      {
+        path: 'marketing/seckill',
+        element: (
+          <WithPermission permission="seckill:list">
+            <SeckillList />
           </WithPermission>
         ),
       },

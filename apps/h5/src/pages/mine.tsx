@@ -73,7 +73,7 @@ export default function Mine() {
                 className="mine-order-item"
                 onClick={() => navigate(`/orders?status=${s.status}`)}
               >
-                <Badge content={n > 0 ? n : null}>
+                <Badge content={s.status !== '40' && n > 0 ? n : null}>
                   <span className="mine-order-icon">{s.icon}</span>
                 </Badge>
                 <span className="mine-order-label">{s.label}</span>
@@ -84,7 +84,6 @@ export default function Mine() {
       </div>
 
       <List className="mine-menu">
-        <List.Item onClick={() => navigate('/coupons')}>领券中心</List.Item>
         <List.Item onClick={() => navigate('/coupons/mine')}>我的券</List.Item>
         <List.Item onClick={() => navigate('/address')}>地址管理</List.Item>
       </List>

@@ -230,6 +230,7 @@ model ProductSku {
   specValues SkuSpecValue[]
   carts      Cart[]
   orderItems OrderItem[]
+  seckillActivitySkus SeckillActivitySku[]
 
   @@index([productId])
   @@map("product_sku")
@@ -320,6 +321,7 @@ model OrderItem {
   productName  String   @map("product_name")
   skuSpec      String   @map("sku_spec")
   productImage String?  @map("product_image")
+  activityId   Int?     @map("activity_id") // 秒杀活动 id，普通订单为 null
   price        Int
   quantity     Int
   totalAmount  Int      @map("total_amount")
@@ -331,6 +333,7 @@ model OrderItem {
 
   @@index([orderId])
   @@index([skuId])
+  @@index([activityId])
   @@map("order_items")
 }
 
@@ -396,4 +399,39 @@ model UserCoupon {
   @@index([userId, status])
   @@index([couponId])
   @@map("user_coupon")
+}
+
+// ============ 秒杀 ============
+
+// 秒杀活动（场次）：时间窗口 + 一组秒杀商品；「进行中/未开始/已结束」由 startTime/endTime 推导，不落库
+model SeckillActivity {
+  id        Int       @id @default(autoincrement())
+  name      String
+  startTime DateTime  @map("start_time")
+  endTime   DateTime  @map("end_time")
+  status    Int       @default(1) // 1=启用 0=停用
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  skus SeckillActivitySku[]
+
+  @@map("seckill_activity")
+}
+
+// 秒杀活动商品：某活动下的某 SKU，带独立秒杀价/秒杀库存；每商品每用户限购 1（Redis 集合实现）
+model SeckillActivitySku {
+  id           Int      @id @default(autoincrement())
+  activityId   Int      @map("activity_id")
+  skuId        Int      @map("sku_id")
+  seckillPrice Int      @map("seckill_price") // 秒杀价（分）
+  seckillStock Int      @map("seckill_stock") // 秒杀库存（件），Redis 惰性初始化的上限
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  activity SeckillActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  sku      ProductSku      @relation(fields: [skuId], references: [id])
+
+  @@unique([activityId, skuId])
+  @@index([skuId])
+  @@map("seckill_activity_sku")
 }

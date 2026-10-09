@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { NavBar, Tabs, Toast } from 'antd-mobile';
+import { useCallback, useEffect, useState } from 'react';
+import { Button, NavBar, Tabs, Toast } from 'antd-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { listOrders, ORDER_STATUS_TEXT } from '../api/trade';
+import { cancelOrder, confirmOrder, listOrders, ORDER_STATUS_TEXT, payOrder } from '../api/trade';
 import type { OrderSummary } from '../api/trade';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
@@ -23,23 +23,36 @@ export default function Orders() {
   const [list, setList] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    void (async () => {
-      try {
-        const res = await listOrders({
-          page: 1,
-          pageSize: 50,
-          status: tab === 'all' ? undefined : Number(tab),
-        });
-        setList(res.data.data.list);
-      } catch (e) {
-        Toast.show({ content: getErrorMessage(e), icon: 'fail' });
-      } finally {
-        setLoading(false);
-      }
-    })();
+    try {
+      const res = await listOrders({
+        page: 1,
+        pageSize: 50,
+        status: tab === 'all' ? undefined : Number(tab),
+      });
+      setList(res.data.data.list);
+    } catch (e) {
+      Toast.show({ content: getErrorMessage(e), icon: 'fail' });
+    } finally {
+      setLoading(false);
+    }
   }, [tab]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // 列表页直接操作（与订单详情页按钮行为保持一致），操作后刷新列表
+  const act = async (fn: () => Promise<unknown>, msg: string) => {
+    try {
+      await fn();
+      Toast.show({ content: msg, icon: 'success' });
+      await load();
+    } catch (e) {
+      Toast.show({ content: getErrorMessage(e), icon: 'fail' });
+    }
+  };
 
   return (
     <div className="page">
@@ -77,6 +90,36 @@ export default function Orders() {
                   实付 <span className="price">{formatPrice(o.payAmount)}</span>
                 </span>
               </div>
+              {(o.status === 10 || o.status === 30) && (
+                <div className="order-actions" onClick={(e) => e.stopPropagation()}>
+                  {o.status === 10 && (
+                    <>
+                      <Button
+                        size="small"
+                        color="primary"
+                        onClick={() => void act(() => payOrder(o.id), '支付成功')}
+                      >
+                        去支付
+                      </Button>
+                      <Button
+                        size="small"
+                        onClick={() => void act(() => cancelOrder(o.id), '已取消')}
+                      >
+                        取消订单
+                      </Button>
+                    </>
+                  )}
+                  {o.status === 30 && (
+                    <Button
+                      size="small"
+                      color="primary"
+                      onClick={() => void act(() => confirmOrder(o.id), '已确认收货')}
+                    >
+                      确认收货
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

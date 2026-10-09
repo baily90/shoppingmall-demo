@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, NavBar, Stepper, Toast } from 'antd-mobile';
+import { Button, Checkbox, NavBar, Popup, Stepper, Toast } from 'antd-mobile';
 import { useNavigate } from 'react-router-dom';
 import { listCart, removeCartItem, updateCartItem } from '../api/trade';
 import type { CartItem } from '../api/trade';
+import { listMyCoupons, computeDiscount } from '../api/coupon';
+import type { MyCoupon } from '../api/coupon';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
 import BottomTabBar from '../components/TabBar';
@@ -13,6 +15,8 @@ export default function Cart() {
   const { refresh } = useCartCount();
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [myCoupons, setMyCoupons] = useState<MyCoupon[]>([]);
+  const [detailPopup, setDetailPopup] = useState(false);
 
   const load = async () => {
     try {
@@ -28,6 +32,12 @@ export default function Cart() {
     void load();
   }, []);
 
+  useEffect(() => {
+    listMyCoupons()
+      .then((res) => setMyCoupons(res.data.data))
+      .catch(() => {});
+  }, []);
+
   const onSaleItems = useMemo(() => items.filter((i) => i.onSale), [items]);
   const selectedItems = useMemo(() => onSaleItems.filter((i) => i.selected === 1), [onSaleItems]);
   const totalPrice = useMemo(
@@ -35,6 +45,21 @@ export default function Cart() {
     [selectedItems],
   );
   const allSelected = onSaleItems.length > 0 && onSaleItems.every((i) => i.selected === 1);
+
+  // 可用券（同结算页口径）：未使用 + 未过期 + 满足门槛，取优惠最大的一张做预览
+  const usableCoupons = useMemo(
+    () =>
+      myCoupons
+        .filter((c) => c.status === 1 && !c.expired && c.coupon.thresholdAmount <= totalPrice)
+        .sort(
+          (a, b) => computeDiscount(b.coupon, totalPrice) - computeDiscount(a.coupon, totalPrice),
+        ),
+    [myCoupons, totalPrice],
+  );
+  const bestCoupon = usableCoupons[0];
+  const discount = bestCoupon
+    ? Math.min(computeDiscount(bestCoupon.coupon, totalPrice), totalPrice)
+    : 0;
 
   const patch = (id: number, data: { quantity?: number; selected?: number }) => {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...data } : i)));
@@ -146,14 +171,41 @@ export default function Cart() {
           <Checkbox checked={allSelected} onChange={(v) => void toggleSelectAll(v)}>
             全选
           </Checkbox>
-          <div className="cart-total">
-            合计：<span className="price">{formatPrice(totalPrice)}</span>
+          <div className="cart-total" onClick={() => setDetailPopup(true)}>
+            <div>
+              合计：<span className="price">{formatPrice(totalPrice - discount)}</span>
+              <span className="cart-total-arrow">›</span>
+            </div>
+            {bestCoupon && discount > 0 && (
+              <div className="cart-coupon-hint">
+                已选「{bestCoupon.coupon.name}」-{formatPrice(discount)}
+              </div>
+            )}
           </div>
           <Button color="primary" onClick={checkout}>
             去结算({selectedItems.length})
           </Button>
         </div>
       )}
+      <Popup visible={detailPopup} onMaskClick={() => setDetailPopup(false)} position="bottom">
+        <div className="addr-pop-title">金额明细</div>
+        <div className="price-detail">
+          <div className="price-detail-row">
+            <span>商品总金额</span>
+            <span>{formatPrice(totalPrice)}</span>
+          </div>
+          <div className="price-detail-row">
+            <span>优惠券{bestCoupon && discount > 0 ? `（${bestCoupon.coupon.name}）` : ''}</span>
+            <span className={discount > 0 ? 'price-detail-discount' : ''}>
+              {discount > 0 ? `-${formatPrice(discount)}` : '无'}
+            </span>
+          </div>
+          <div className="price-detail-row price-detail-total">
+            <span>应付合计</span>
+            <span className="price">{formatPrice(totalPrice - discount)}</span>
+          </div>
+        </div>
+      </Popup>
       <BottomTabBar />
     </div>
   );

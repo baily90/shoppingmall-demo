@@ -3,6 +3,7 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { Queue } from 'bullmq';
 import { ORDER_QUEUE } from './trade/order.constant';
+import { SECKILL_QUEUE } from './seckill/seckill.constant';
 
 const BOARD_PORT = 3001;
 
@@ -21,8 +22,12 @@ export function startQueueBoard() {
     connection: { host, port },
   });
 
+  const seckillQueue = new Queue(SECKILL_QUEUE, {
+    connection: { host, port },
+  });
+
   createBullBoard({
-    queues: [new BullMQAdapter(orderQueue)],
+    queues: [new BullMQAdapter(orderQueue), new BullMQAdapter(seckillQueue)],
     serverAdapter,
   });
 

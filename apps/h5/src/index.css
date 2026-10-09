@@ -313,6 +313,39 @@ body {
   flex: 1;
   text-align: right;
   font-size: 14px;
+  cursor: pointer;
+}
+.cart-total-arrow {
+  color: #bbb;
+  margin-left: 4px;
+}
+.cart-coupon-hint {
+  font-size: 12px;
+  color: #ff3141;
+  margin-top: 2px;
+}
+.price-detail {
+  padding: 8px 16px 16px;
+}
+.price-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: #333;
+  line-height: 2.4;
+}
+.price-detail-row span:first-child {
+  color: #666;
+}
+.price-detail-discount {
+  color: #ff3141;
+}
+.price-detail-total {
+  border-top: 1px solid #f0f0f0;
+  margin-top: 4px;
+  padding-top: 4px;
+  font-weight: 600;
 }
 
 /* ==================== 结算 ==================== */
@@ -484,6 +517,12 @@ body {
   font-size: 13px;
   color: #666;
 }
+.order-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
 
 /* ==================== 订单详情 ==================== */
 .od-status {
@@ -529,6 +568,24 @@ body {
   font-size: 14px;
   padding-top: 8px;
   border-top: 1px solid #f0f0f0;
+}
+.od-total-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  color: #333;
+  line-height: 1.9;
+}
+.od-total-lbl {
+  color: #999;
+}
+.od-total-discount {
+  color: #ff3141;
+}
+.od-total-final {
+  font-size: 14px;
 }
 .od-actions {
   position: fixed;
@@ -633,6 +690,117 @@ body {
 .coupon-entry-arrow {
   color: #ccc;
   font-size: 18px;
+}
+.seckill-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: #fff;
+  color: #ff3141;
+  font-size: 14px;
+  border-bottom: 1px solid #eee;
+}
+
+/* ==================== 秒杀 ==================== */
+.seckill-page {
+  padding: 12px;
+}
+.seckill-banner {
+  display: flex;
+  gap: 12px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px;
+}
+.seckill-img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  background: #f7f8fa;
+  border-radius: 6px;
+  flex: 0 0 auto;
+}
+.seckill-info {
+  flex: 1;
+  min-width: 0;
+}
+.seckill-name {
+  font-size: 16px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seckill-spec {
+  font-size: 12px;
+  color: #999;
+  margin-top: 2px;
+}
+.seckill-price-row {
+  display: flex;
+  align-items: baseline;
+  margin-top: 6px;
+}
+.seckill-price {
+  color: #ff3141;
+  font-weight: 700;
+  font-size: 22px;
+}
+.seckill-stock {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+.seckill-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1px solid #eee;
+}
+.seckill-result-title {
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+  padding: 8px 0;
+}
+.seckill-activity {
+  margin-bottom: 16px;
+}
+.seckill-activity-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 2px;
+}
+.seckill-activity-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+}
+.seckill-activity-time {
+  font-size: 12px;
+  color: #999;
+}
+.seckill-card {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.seckill-card .seckill-img {
+  width: 80px;
+  height: 80px;
+}
+.seckill-card-info {
+  flex: 1;
+  min-width: 0;
 }
 .coupon-list {
   padding: 8px 12px;

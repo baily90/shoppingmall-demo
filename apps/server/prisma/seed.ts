@@ -155,6 +155,19 @@ const permissionDefs: PermDef[] = [
           { code: 'coupon:delete', name: '删除优惠券', type: 3, sort: 3 },
         ],
       },
+      {
+        code: 'seckill:list',
+        name: '秒杀活动',
+        type: 2,
+        path: '/marketing/seckill',
+        icon: 'ThunderboltOutlined',
+        sort: 2,
+        children: [
+          { code: 'seckill:create', name: '新增活动', type: 3, sort: 1 },
+          { code: 'seckill:update', name: '编辑活动', type: 3, sort: 2 },
+          { code: 'seckill:delete', name: '删除活动', type: 3, sort: 3 },
+        ],
+      },
     ],
   },
 ];

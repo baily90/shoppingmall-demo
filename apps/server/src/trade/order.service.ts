@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { PAYMENT_SERVICE, PaymentService } from '../payment/payment.service';
 import { CouponService } from '../coupon/coupon.service';
+import { SeckillService } from '../seckill/seckill.service';
 import { CreateOrderDto, ListOrderDto, ShipOrderDto } from './dto/order.dto';
 import {
   AUTO_CANCEL_JOB,
@@ -27,6 +28,7 @@ export class OrderService {
     private readonly prisma: PrismaService,
     @Inject(PAYMENT_SERVICE) private readonly payment: PaymentService,
     private readonly couponService: CouponService,
+    @Inject(forwardRef(() => SeckillService)) private readonly seckillService: SeckillService,
     @InjectQueue(ORDER_QUEUE) private readonly orderQueue: Queue,
     configService: ConfigService,
   ) {
@@ -168,6 +170,125 @@ export class OrderService {
     return { id: orderId, orderNo };
   }
 
+  /**
+   * 秒杀落单：单一 SKU、指定秒杀价、限购 1 件，由秒杀 MQ 异步调用。
+   * 与 create() 共用同一套地址快照 / 原子扣库存 / 幂等 / 自动取消逻辑。
+   */
+  async createSeckillOrder(dto: {
+    userId: number;
+    skuId: number;
+    activityId: number;
+    price: number;
+    quantity: number;
+    idempotencyKey: string;
+  }): Promise<{ id: number; orderNo: string }> {
+    // 幂等：同一 requestId 重复消费（MQ 重试）只落一单
+    const existing = await this.prisma.order.findUnique({
+      where: { idempotencyKey: dto.idempotencyKey },
+    });
+    if (existing) {
+      return { id: existing.id, orderNo: existing.orderNo };
+    }
+
+    // 秒杀落单取用户默认地址（抢购动作本身不选地址，保持热路径最轻）
+    const address = await this.prisma.userAddress.findFirst({
+      where: { userId: dto.userId },
+      orderBy: [{ isDefault: 'desc' }, { id: 'desc' }],
+    });
+    if (!address) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '请先添加收货地址');
+    }
+
+    const sku = await this.prisma.productSku.findUnique({
+      where: { id: dto.skuId },
+      include: {
+        product: {
+          select: { id: true, name: true, mainImage: true, status: true, deletedAt: true },
+        },
+        specValues: { include: { specValue: { include: { group: { select: { name: true } } } } } },
+      },
+    });
+    if (!sku) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '商品不存在');
+    }
+    if (sku.status !== 1 || sku.product.status !== 1 || sku.product.deletedAt) {
+      throw new BusinessException(ErrorCode.NOT_ALLOWED, `「${sku.product.name}」已下架`);
+    }
+
+    const orderNo = this.genNo('SK');
+    const receiverAddress = this.joinAddress(address);
+    const total = dto.price * dto.quantity;
+
+    let orderId: number;
+    try {
+      orderId = await this.prisma.$transaction(async (tx) => {
+        const res = await tx.productSku.updateMany({
+          where: { id: dto.skuId, stock: { gte: dto.quantity } },
+          data: { stock: { decrement: dto.quantity } },
+        });
+        if (res.count === 0) {
+          throw new BusinessException(ErrorCode.OUT_OF_STOCK, `「${sku.product.name}」库存不足`);
+        }
+
+        const order = await tx.order.create({
+          data: {
+            orderNo,
+            userId: dto.userId,
+            idempotencyKey: dto.idempotencyKey,
+            totalAmount: total,
+            freightAmount: 0,
+            payAmount: total,
+            status: OrderStatus.PENDING_PAYMENT,
+            receiverName: address.receiverName,
+            receiverPhone: address.receiverPhone,
+            receiverAddress,
+          },
+        });
+
+        await tx.orderItem.create({
+          data: {
+            orderId: order.id,
+            skuId: dto.skuId,
+            activityId: dto.activityId,
+            productId: sku.product.id,
+            productName: sku.product.name,
+            skuSpec: this.specText(sku.specValues),
+            productImage: sku.image ?? sku.product.mainImage,
+            price: dto.price,
+            quantity: dto.quantity,
+            totalAmount: total,
+          },
+        });
+        return order.id;
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        const existing = await this.prisma.order.findUnique({
+          where: { idempotencyKey: dto.idempotencyKey },
+        });
+        if (existing) {
+          return { id: existing.id, orderNo: existing.orderNo };
+        }
+      }
+      throw e;
+    }
+
+    // 到点未支付自动取消（复用现有订单队列 + 处理器）
+    try {
+      await this.orderQueue.add(AUTO_CANCEL_JOB, { orderId }, { delay: this.payTimeoutMs });
+    } catch (e) {
+      console.warn('[seckill] 自动取消任务入队失败，订单需手动取消兜底:', e);
+    }
+
+    return { id: orderId, orderNo };
+  }
+
+  /** 按幂等键查订单（秒杀落单失败自愈时用） */
+  async findOrderByRequestId(requestId: string) {
+    const order = await this.prisma.order.findUnique({ where: { idempotencyKey: requestId } });
+    return order ? { id: order.id, orderNo: order.orderNo } : null;
+  }
+
   async pay(userId: number, orderId: number) {
     const order = await this.ensureOwn(userId, orderId);
     if (order.status !== OrderStatus.PENDING_PAYMENT) {
@@ -221,10 +342,12 @@ export class OrderService {
    * 与「支付」并发时靠 where 里的 status 判断，两个动作只会有一个成功（幂等）。
    */
   async cancelPendingOrder(orderId: number): Promise<boolean> {
-    return this.prisma.$transaction(async (tx) => {
+    // 秒杀配额回补放在 PG 事务提交后做：Redis 不参与 DB 事务，refundQuota 幂等、best-effort
+    const seckillRefunds: { activityId: number; skuId: number; userId: number }[] = [];
+    const canceled = await this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },
-        select: { couponId: true },
+        select: { couponId: true, userId: true },
       });
       if (!order) return false;
 
@@ -235,12 +358,23 @@ export class OrderService {
       if (res.count === 0) return false; // 已支付/已取消/不存在，跳过
 
       // 释放下单时扣掉的库存
-      const items = await tx.orderItem.findMany({ where: { orderId } });
+      const items = await tx.orderItem.findMany({
+        where: { orderId },
+        select: { skuId: true, quantity: true, activityId: true },
+      });
       for (const it of items) {
         await tx.productSku.update({
           where: { id: it.skuId },
           data: { stock: { increment: it.quantity } },
         });
+        // 秒杀订单：记录待回补的 (活动, 商品) 配额
+        if (it.activityId != null) {
+          seckillRefunds.push({
+            activityId: it.activityId,
+            skuId: it.skuId,
+            userId: order.userId,
+          });
+        }
       }
 
       // 回退优惠券（取消订单把已占用的券还给用户）
@@ -249,6 +383,17 @@ export class OrderService {
       }
       return true;
     });
+
+    if (canceled) {
+      for (const r of seckillRefunds) {
+        try {
+          await this.seckillService.refundQuota(r.activityId, r.skuId, r.userId);
+        } catch (e) {
+          console.warn('[seckill] 取消订单回补秒杀配额失败:', r, e);
+        }
+      }
+    }
+    return canceled;
   }
 
   async confirm(userId: number, orderId: number) {

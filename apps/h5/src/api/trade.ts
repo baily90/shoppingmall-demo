@@ -86,6 +86,7 @@ export interface OrderDetail {
   userId: number;
   totalAmount: number;
   freightAmount: number;
+  discountAmount: number;
   payAmount: number;
   status: number;
   receiverName: string;
@@ -100,6 +101,12 @@ export interface OrderDetail {
   createdAt: string;
   payExpireAt: string;
   items: OrderItem[];
+  userCoupon: {
+    id: number;
+    couponId: number;
+    status: number;
+    coupon: { id: number; name: string };
+  } | null;
 }
 
 export interface CreateOrderPayload {

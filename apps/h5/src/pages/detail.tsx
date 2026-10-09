@@ -31,6 +31,18 @@ export default function Detail() {
     })();
   }, [id]);
 
+  // 进入页面默认选中第一个 SKU 对应的规格，点击「加入购物车/立即购买」即可直接下单
+  useEffect(() => {
+    if (!detail) return;
+    const firstSku = detail.skus[0];
+    if (!firstSku) return;
+    const init: Record<number, number> = {};
+    for (const sv of firstSku.specValues) {
+      init[sv.groupId] = sv.id;
+    }
+    setSelected(init);
+  }, [detail]);
+
   const images = useMemo(() => {
     if (!detail) return [];
     const list = detail.images.length ? detail.images.map((i) => i.url) : [detail.mainImage];

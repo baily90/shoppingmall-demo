@@ -106,6 +106,10 @@ export default function Home() {
         <span>🎁 领券中心</span>
         <span className="coupon-entry-arrow">›</span>
       </div>
+      <div className="seckill-entry" onClick={() => navigate('/seckill')}>
+        <span>⚡ 秒杀专区</span>
+        <span className="coupon-entry-arrow">›</span>
+      </div>
       <SearchBar
         placeholder="搜索商品"
         defaultValue={keyword}

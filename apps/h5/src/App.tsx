@@ -1,5 +1,6 @@
 import { Navigate, RouterProvider, createBrowserRouter } from 'react-router-dom';
 import Home from './pages/home';
+import Seckill from './pages/seckill';
 import Detail from './pages/detail';
 import Login from './pages/login';
 import Cart from './pages/cart';
@@ -17,6 +18,14 @@ const router = createBrowserRouter([
   { path: '/', element: <Home /> },
   { path: '/list', element: <Navigate to="/" replace /> },
   { path: '/product/:id', element: <Detail /> },
+  {
+    path: '/seckill',
+    element: (
+      <RequireAuth>
+        <Seckill />
+      </RequireAuth>
+    ),
+  },
   { path: '/login', element: <Login /> },
   { path: '/coupons', element: <Coupons /> },
   {

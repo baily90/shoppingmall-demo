@@ -65,4 +65,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       console.warn('[redis] 缓存删除失败，忽略（由 TTL 兜底）:', e);
     }
   }
+
+  /** 仅当 key 不存在时写入（返回是否写入成功，用于初始化默认值，如秒杀库存） */
+  async setNX(key: string, value: string): Promise<boolean> {
+    const res = await this.client.set(key, value, 'NX');
+    return res === 'OK';
+  }
+
+  /** 执行 Lua 脚本（原子操作，秒杀预扣等并发场景用） */
+  async evalScript(script: string, keys: string[], args: (string | number)[]): Promise<unknown> {
+    return this.client.eval(script, keys.length, ...keys, ...args);
+  }
 }

@@ -20,6 +20,7 @@ export interface OrderRow {
   userId: number;
   totalAmount: number;
   freightAmount: number;
+  discountAmount: number;
   payAmount: number;
   status: number;
   receiverName: string;
@@ -35,6 +36,7 @@ export interface OrderRow {
   createdAt: string;
   user: { id: number; phone: string; nickname: string };
   items: OrderItemRow[];
+  userCoupon: { coupon: { name: string } } | null;
 }
 
 export interface ListOrderParams extends PageQuery {
