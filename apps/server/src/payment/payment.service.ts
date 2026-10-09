@@ -7,9 +7,17 @@ export interface PaymentResult {
   transactionId: string;
 }
 
+export interface RefundResult {
+  /** 渠道退款流水号（第三方返回，mock 下为伪造值） */
+  refundTransactionId: string;
+}
+
 export interface PaymentService {
   /** 发起支付，返回支付结果（含渠道流水号） */
   createPayment(orderNo: string, amount: number): Promise<PaymentResult>;
+
+  /** 发起退款（refundNo 作为渠道幂等键，重复调用按同一笔退款处理） */
+  refund(orderNo: string, refundNo: string, amount: number): Promise<RefundResult>;
 }
 
 export const PAYMENT_SERVICE = 'PAYMENT_SERVICE';

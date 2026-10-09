@@ -1,5 +1,6 @@
 import type { ApiResponse } from '@mall/shared';
 import request from './request';
+import type { Refund } from './refund';
 
 // ==================== 地址 ====================
 export interface Address {
@@ -63,6 +64,7 @@ export interface OrderSummary {
   itemCount: number;
   firstImage: string | null;
   firstName: string;
+  refund: Refund | null;
   createdAt: string;
   payExpireAt: string;
 }
@@ -107,6 +109,7 @@ export interface OrderDetail {
     status: number;
     coupon: { id: number; name: string };
   } | null;
+  refunds: Refund[];
 }
 
 export interface CreateOrderPayload {
@@ -150,4 +153,5 @@ export const ORDER_STATUS_TEXT: Record<number, string> = {
   30: '待收货',
   40: '已完成',
   50: '已取消',
+  60: '已退款',
 };

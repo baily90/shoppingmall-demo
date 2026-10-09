@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { PaymentResult, PaymentService } from './payment.service';
+import type { PaymentResult, PaymentService, RefundResult } from './payment.service';
 
 /**
  * Mock 支付：同步返回成功，不接入真实渠道。
@@ -10,5 +10,9 @@ import type { PaymentResult, PaymentService } from './payment.service';
 export class MockPaymentService implements PaymentService {
   async createPayment(orderNo: string, _amount: number): Promise<PaymentResult> {
     return { transactionId: `MOCK-${orderNo}-${Date.now()}-${randomUUID().slice(0, 6)}` };
+  }
+
+  async refund(orderNo: string, refundNo: string, _amount: number): Promise<RefundResult> {
+    return { refundTransactionId: `MOCK-R-${orderNo}-${refundNo}-${Date.now()}` };
   }
 }

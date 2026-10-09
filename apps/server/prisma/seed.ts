@@ -135,12 +135,31 @@ const permissionDefs: PermDef[] = [
     ],
   },
   {
+    code: 'aftersale',
+    name: '售后管理',
+    type: 1,
+    path: '/aftersale',
+    icon: 'FileProtectOutlined',
+    sort: 4,
+    children: [
+      {
+        code: 'aftersale:list',
+        name: '售后列表',
+        type: 2,
+        path: '/aftersale/list',
+        icon: 'FileDoneOutlined',
+        sort: 1,
+        children: [{ code: 'aftersale:review', name: '售后审核', type: 3, sort: 1 }],
+      },
+    ],
+  },
+  {
     code: 'marketing',
     name: '营销管理',
     type: 1,
     path: '/marketing',
     icon: 'GiftOutlined',
-    sort: 4,
+    sort: 5,
     children: [
       {
         code: 'coupon:list',

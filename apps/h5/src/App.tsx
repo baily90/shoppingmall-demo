@@ -9,6 +9,7 @@ import AddressList from './pages/address';
 import AddressEdit from './pages/address-edit';
 import Orders from './pages/orders';
 import OrderDetailPage from './pages/order-detail';
+import RefundApply from './pages/refund-apply';
 import Mine from './pages/mine';
 import Coupons from './pages/coupons';
 import CouponMine from './pages/coupon-mine';
@@ -89,6 +90,14 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <OrderDetailPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/order/:id/refund',
+    element: (
+      <RequireAuth>
+        <RefundApply />
       </RequireAuth>
     ),
   },

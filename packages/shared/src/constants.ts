@@ -13,6 +13,8 @@ export const ErrorCode = {
   NOT_ALLOWED: 10010,
   COUPON_RECEIVE_FAILED: 10011,
   COUPON_UNAVAILABLE: 10012,
+  REFUND_EXISTS: 10013,
+  REFUND_STATE_INVALID: 10014,
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

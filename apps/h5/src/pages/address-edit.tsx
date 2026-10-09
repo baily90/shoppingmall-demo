@@ -27,7 +27,7 @@ export default function AddressEdit() {
   }, [editingId, form]);
 
   const submit = async () => {
-    let values: AddressPayload & { isDefault: boolean };
+    let values: Omit<AddressPayload, 'isDefault'> & { isDefault: boolean };
     try {
       values = await form.validateFields();
     } catch {

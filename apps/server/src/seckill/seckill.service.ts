@@ -10,8 +10,10 @@ import { BusinessException } from '../common/exceptions/business.exception';
 import {
   SECKILL_CREATE_ORDER_JOB,
   SECKILL_GRAB_LUA,
+  SECKILL_INIT_STOCK_LUA,
   SECKILL_QUEUE,
   SECKILL_RESULT_TTL_SECONDS,
+  seckillKeyTtlSeconds,
   seckillReqKey,
   seckillResultKey,
   seckillStockKey,
@@ -98,7 +100,7 @@ export class SeckillService {
       for (const item of act.skus) {
         const sku = item.sku;
         if (sku.status !== 1 || sku.product.status !== 1 || sku.product.deletedAt) continue;
-        await this.ensureSkuStock(act.id, item.skuId, item.seckillStock, sku.stock);
+        await this.ensureSkuStock(act.id, item.skuId, item.seckillStock, sku.stock, act.endTime);
         const remaining = Number(
           (await this.redisService.get(seckillStockKey(act.id, item.skuId))) ?? 0,
         );
@@ -148,14 +150,15 @@ export class SeckillService {
       return { status: 'unavailable', message: '商品已下架' };
     }
 
-    await this.ensureSkuStock(activityId, skuId, item.seckillStock, sku.stock);
+    await this.ensureSkuStock(activityId, skuId, item.seckillStock, sku.stock, activity.endTime);
 
     const stockKey = seckillStockKey(activityId, skuId);
     const usersKey = seckillUsersKey(activityId, skuId);
+    const ttl = seckillKeyTtlSeconds(activity.endTime);
     const outcome = (await this.redisService.evalScript(
       SECKILL_GRAB_LUA,
       [stockKey, usersKey],
-      [String(userId)],
+      [String(userId), ttl],
     )) as number;
 
     if (outcome === -1) {
@@ -412,17 +415,23 @@ export class SeckillService {
   // ---------- 工具 ----------
 
   /**
-   * 惰性初始化某 (活动, 商品) 的 Redis 秒杀库存（首次 SETNX，重启不重置）。
+   * 惰性初始化某 (活动, 商品) 的 Redis 秒杀库存（首次建 key，重启不重置）。
    * 配额 = min(配置秒杀库存, 物理库存)，保证秒杀不超卖物理库存。
+   * 原子脚本：新建带 TTL；已存在的旧 key（升级前无 TTL）补过期时间，不覆盖已扣减的值。
    */
   private async ensureSkuStock(
     activityId: number,
     skuId: number,
     seckillStock: number,
     physicalStock: number,
+    endTime: Date,
   ): Promise<void> {
     const quota = Math.min(seckillStock, physicalStock);
-    await this.redisService.setNX(seckillStockKey(activityId, skuId), String(quota));
+    await this.redisService.evalScript(
+      SECKILL_INIT_STOCK_LUA,
+      [seckillStockKey(activityId, skuId)],
+      [seckillKeyTtlSeconds(endTime), quota],
+    );
   }
 
   private async ensureActivity(id: number) {

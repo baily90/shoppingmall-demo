@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, NavBar, Toast } from 'antd-mobile';
+import { Button, Form, Input, NavBar, Popup, Toast } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { cancelOrder, confirmOrder, getOrder, ORDER_STATUS_TEXT, payOrder } from '../api/trade';
 import type { OrderDetail } from '../api/trade';
+import { REFUND_STATUS_TEXT, REFUND_TYPE_TEXT, shipBackRefund } from '../api/refund';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
+
+const ACTIVE_REFUND_STATUS = [10, 20, 30];
 
 const formatCountdown = (ms: number) => {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -18,6 +21,11 @@ export default function OrderDetailPage() {
   const { id } = useParams();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [now, setNow] = useState(() => Date.now());
+
+  // 退货物流弹层（退货退款审核通过后）
+  const [shipBackVisible, setShipBackVisible] = useState(false);
+  const [shipBackSubmitting, setShipBackSubmitting] = useState(false);
+  const [shipBackForm] = Form.useForm();
 
   const load = async () => {
     try {
@@ -63,6 +71,31 @@ export default function OrderDetailPage() {
     }
   };
 
+  const refunds = order?.refunds ?? [];
+  const latestRefund = refunds[0] ?? null;
+  const activeRefund = refunds.find((r) => ACTIVE_REFUND_STATUS.includes(r.status)) ?? null;
+
+  const handleShipBack = async () => {
+    let values: { logisticsCompany: string; logisticsNo: string };
+    try {
+      values = await shipBackForm.validateFields();
+    } catch {
+      return;
+    }
+    if (!activeRefund) return;
+    setShipBackSubmitting(true);
+    try {
+      await shipBackRefund(activeRefund.id, values);
+      Toast.show({ content: '退货物流已提交', icon: 'success' });
+      setShipBackVisible(false);
+      await load();
+    } catch (e) {
+      Toast.show({ content: getErrorMessage(e), icon: 'fail' });
+    } finally {
+      setShipBackSubmitting(false);
+    }
+  };
+
   if (!order) {
     return (
       <div className="page">
@@ -78,6 +111,32 @@ export default function OrderDetailPage() {
       <div className="od-status">{ORDER_STATUS_TEXT[order.status]}</div>
       {order.status === 10 && remainMs > 0 && (
         <div className="od-countdown">支付剩余 {formatCountdown(remainMs)}，超时自动取消</div>
+      )}
+
+      {latestRefund && (
+        <div className="od-card">
+          <div className="od-row">
+            <span>售后状态：</span>
+            {REFUND_TYPE_TEXT[latestRefund.type]} ·{' '}
+            {REFUND_STATUS_TEXT[latestRefund.status] ?? latestRefund.status}
+          </div>
+          <div className="od-row">
+            <span>退款金额：</span>
+            <span className="price">{formatPrice(latestRefund.amount)}</span>
+          </div>
+          {latestRefund.status === 90 && latestRefund.rejectReason && (
+            <div className="od-row">
+              <span>拒绝原因：</span>
+              {latestRefund.rejectReason}
+            </div>
+          )}
+          {latestRefund.logisticsCompany && (
+            <div className="od-row">
+              <span>退货物流：</span>
+              {latestRefund.logisticsCompany} {latestRefund.logisticsNo}
+            </div>
+          )}
+        </div>
       )}
 
       <div className="od-card">
@@ -147,7 +206,7 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {(order.status === 10 || order.status === 30) && (
+      {(order.status === 10 || order.status === 20 || order.status === 30) && (
         <div className="od-actions">
           {order.status === 10 && (
             <>
@@ -162,7 +221,7 @@ export default function OrderDetailPage() {
               </Button>
             </>
           )}
-          {order.status === 30 && (
+          {order.status === 30 && !activeRefund && (
             <Button
               color="primary"
               onClick={() => void act(() => confirmOrder(order.id), '已确认收货')}
@@ -170,8 +229,60 @@ export default function OrderDetailPage() {
               确认收货
             </Button>
           )}
+          {!activeRefund && order.status === 20 && (
+            <Button color="primary" onClick={() => navigate(`/order/${order.id}/refund`)}>
+              申请退款
+            </Button>
+          )}
+          {!activeRefund && order.status === 30 && (
+            <Button onClick={() => navigate(`/order/${order.id}/refund`)}>申请退货退款</Button>
+          )}
+          {activeRefund?.status === 20 && (
+            <Button color="primary" onClick={() => setShipBackVisible(true)}>
+              填写退货物流
+            </Button>
+          )}
         </div>
       )}
+
+      <Popup
+        visible={shipBackVisible}
+        onMaskClick={() => setShipBackVisible(false)}
+        position="bottom"
+        bodyStyle={{ padding: 16 }}
+      >
+        <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>填写退货物流</div>
+        <Form
+          form={shipBackForm}
+          layout="vertical"
+          footer={
+            <Button
+              block
+              color="primary"
+              size="large"
+              loading={shipBackSubmitting}
+              onClick={() => void handleShipBack()}
+            >
+              提交
+            </Button>
+          }
+        >
+          <Form.Item
+            name="logisticsCompany"
+            label="物流公司"
+            rules={[{ required: true, message: '请输入物流公司' }]}
+          >
+            <Input placeholder="如 顺丰速运" maxLength={50} />
+          </Form.Item>
+          <Form.Item
+            name="logisticsNo"
+            label="物流单号"
+            rules={[{ required: true, message: '请输入物流单号' }]}
+          >
+            <Input placeholder="如 SF123456789" maxLength={50} />
+          </Form.Item>
+        </Form>
+      </Popup>
     </div>
   );
 }

@@ -419,7 +419,7 @@ export class OrderService {
     const [orders, total] = await Promise.all([
       this.prisma.order.findMany({
         where,
-        include: { items: true },
+        include: { items: true, refunds: { orderBy: { id: 'desc' }, take: 1 } },
         orderBy: { id: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -438,6 +438,7 @@ export class OrderService {
         itemCount: o.items.reduce((s, i) => s + i.quantity, 0),
         firstImage: o.items[0]?.productImage ?? null,
         firstName: o.items[0]?.productName ?? '',
+        refund: o.refunds[0] ?? null, // 最新一笔售后（可能为 null）
         createdAt: o.createdAt,
         payExpireAt: this.payExpireAt(o.createdAt),
       })),
@@ -463,7 +464,11 @@ export class OrderService {
   async detail(userId: number, orderId: number) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: true, userCoupon: { include: { coupon: true } } },
+      include: {
+        items: true,
+        userCoupon: { include: { coupon: true } },
+        refunds: { orderBy: { id: 'desc' } },
+      },
     });
     if (!order || order.userId !== userId) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '订单不存在');

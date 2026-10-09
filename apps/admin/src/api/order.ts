@@ -49,6 +49,7 @@ export const ORDER_STATUS: Record<number, { text: string; color: string }> = {
   30: { text: '已发货', color: 'cyan' },
   40: { text: '已完成', color: 'green' },
   50: { text: '已取消', color: 'default' },
+  60: { text: '已退款', color: 'magenta' },
 };
 
 export const ORDER_STATUS_OPTIONS = Object.entries(ORDER_STATUS).map(([value, v]) => ({

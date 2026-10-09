@@ -5,6 +5,7 @@ export const OrderStatus = {
   SHIPPED: 30, // 已发货
   COMPLETED: 40, // 已完成
   CANCELED: 50, // 已取消
+  REFUNDED: 60, // 已退款（售后退款成功）
 } as const;
 
 /** 订单队列名（BullMQ） */

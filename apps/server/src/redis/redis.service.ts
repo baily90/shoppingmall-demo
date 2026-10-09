@@ -66,13 +66,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 仅当 key 不存在时写入（返回是否写入成功，用于初始化默认值，如秒杀库存） */
-  async setNX(key: string, value: string): Promise<boolean> {
-    const res = await this.client.set(key, value, 'NX');
-    return res === 'OK';
-  }
-
-  /** 执行 Lua 脚本（原子操作，秒杀预扣等并发场景用） */
+  /** 执行 Lua 脚本（原子操作，秒杀预扣/惰性初始化等并发场景用） */
   async evalScript(script: string, keys: string[], args: (string | number)[]): Promise<unknown> {
     return this.client.eval(script, keys.length, ...keys, ...args);
   }

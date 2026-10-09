@@ -55,7 +55,6 @@ export default function Coupons() {
             const received = receivedIds.has(c.id);
             const soldOut = c.receivedCount >= c.totalStock;
             const notStarted = new Date(c.startTime).getTime() > now;
-            const canReceive = !received && !soldOut && !notStarted;
             return (
               <CouponCard key={c.id} coupon={c} disabled={received || soldOut || notStarted}>
                 {received ? (

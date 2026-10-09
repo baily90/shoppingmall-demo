@@ -13,6 +13,7 @@ import ProductList from '../pages/product/product';
 import OrderList from '../pages/order/order';
 import CouponList from '../pages/marketing/coupon';
 import SeckillList from '../pages/marketing/seckill';
+import RefundList from '../pages/aftersale/refund';
 import Forbidden from '../pages/403';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -109,6 +110,14 @@ export const router = createBrowserRouter([
         element: (
           <WithPermission permission="seckill:list">
             <SeckillList />
+          </WithPermission>
+        ),
+      },
+      {
+        path: 'aftersale/list',
+        element: (
+          <WithPermission permission="aftersale:list">
+            <RefundList />
           </WithPermission>
         ),
       },
