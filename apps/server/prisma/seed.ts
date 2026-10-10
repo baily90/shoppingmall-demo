@@ -187,6 +187,19 @@ const permissionDefs: PermDef[] = [
           { code: 'seckill:delete', name: '删除活动', type: 3, sort: 3 },
         ],
       },
+      {
+        code: 'home:list',
+        name: '首页装修',
+        type: 2,
+        path: '/marketing/home',
+        icon: 'PictureOutlined',
+        sort: 3,
+        children: [
+          { code: 'home:create', name: '新增', type: 3, sort: 1 },
+          { code: 'home:update', name: '编辑', type: 3, sort: 2 },
+          { code: 'home:delete', name: '删除', type: 3, sort: 3 },
+        ],
+      },
     ],
   },
   {
@@ -204,7 +217,10 @@ const permissionDefs: PermDef[] = [
         path: '/review/list',
         icon: 'CommentOutlined',
         sort: 1,
-        children: [{ code: 'review:block', name: '屏蔽评价', type: 3, sort: 1 }],
+        children: [
+          { code: 'review:block', name: '屏蔽评价', type: 3, sort: 1 },
+          { code: 'review:reply', name: '回复评价', type: 3, sort: 2 },
+        ],
       },
     ],
   },

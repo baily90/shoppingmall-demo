@@ -11,3 +11,6 @@ export const productDetailKey = (id: number) => `product:detail:${id}`;
 /** 分类树缓存 key（管理端全量 / 商城端仅启用，各一份） */
 export const categoryTreeAllKey = 'category:tree:all';
 export const categoryTreeEnabledKey = 'category:tree:enabled';
+
+/** 首页装修位缓存 key（轮播图 + 金刚区，一份） */
+export const homeSlotsKey = 'home:slots';

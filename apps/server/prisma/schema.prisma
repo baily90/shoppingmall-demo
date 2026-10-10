@@ -103,6 +103,7 @@ model User {
   userCoupons UserCoupon[]
   refunds     RefundOrder[]
   reviews     ProductReview[]
+  favorites   ProductFavorite[]
 
   @@map("user")
 }
@@ -184,6 +185,7 @@ model Product {
   skus       ProductSku[]
   images     ProductImage[]
   reviews    ProductReview[]
+  favorites  ProductFavorite[]
 
   @@index([categoryId])
   @@index([brandId])
@@ -357,6 +359,9 @@ model ProductReview {
   images      Json? // 图片 URL 数组（string[]）
   anonymous   Boolean   @default(false) @map("is_anonymous")
   status      Int       @default(1) // 1 正常展示 / 0 已屏蔽
+  replyContent String?  @map("reply_content") // 商家回复（单条，可覆盖）
+  replyAt      DateTime? @map("reply_at")
+  replyAdminId Int?      @map("reply_admin_id") // 回复管理员 id（冗余，无外键）
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -495,4 +500,35 @@ model SeckillActivitySku {
   @@unique([activityId, skuId])
   @@index([skuId])
   @@map("seckill_activity_sku")
+}
+
+model ProductFavorite {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  productId Int      @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("product_favorite")
+}
+
+/// 首页装修位：type 1=轮播图 2=金刚区图标，一套模型复用
+model HomeSlot {
+  id        Int      @id @default(autoincrement())
+  type      Int // 1=轮播图 2=金刚区图标
+  name      String // 标题 / 图标名
+  image     String // 图片 / 图标 url
+  linkType  Int      @default(0) @map("link_type") // 0无 1商品 2分类 3秒杀 4外链
+  linkValue String?  @map("link_value") // 商品id/分类id/外链url
+  sort      Int      @default(0)
+  status    Int      @default(1) // 1启用 0停用
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([type, status, sort])
+  @@map("home_slot")
 }

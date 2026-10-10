@@ -11,6 +11,7 @@ import {
   AdminListReviewDto,
   CreateReviewDto,
   ListReviewQueryDto,
+  ReplyDto,
   SetReviewStatusDto,
 } from './dto/review.dto';
 import { PageQueryDto } from '../common/dto/query.dto';
@@ -111,6 +112,8 @@ export class ReviewService {
         avatar: r.anonymous ? null : r.user.avatar,
         skuSpec: r.orderItem.skuSpec,
         mine: currentUserId != null && r.userId === currentUserId,
+        replyContent: r.replyContent,
+        replyAt: r.replyAt,
         createdAt: r.createdAt,
       })),
       total,
@@ -150,6 +153,8 @@ export class ReviewService {
         status: r.status,
         product: r.product,
         skuSpec: r.orderItem.skuSpec,
+        replyContent: r.replyContent,
+        replyAt: r.replyAt,
         createdAt: r.createdAt,
       })),
       total,
@@ -218,6 +223,22 @@ export class ReviewService {
     });
 
     await this.redisService.tryDel(productDetailKey(review.productId));
+    return null;
+  }
+
+  /** 商家回复评价：单条，可覆盖；回复不影响评分聚合/详情缓存（评价列表非缓存） */
+  async adminReply(id: number, dto: ReplyDto, adminId: number) {
+    const review = await this.prisma.productReview.findUnique({ where: { id } });
+    if (!review) throw new BusinessException(ErrorCode.NOT_FOUND, '评价不存在');
+
+    await this.prisma.productReview.update({
+      where: { id },
+      data: {
+        replyContent: dto.content.trim(),
+        replyAt: new Date(),
+        replyAdminId: adminId,
+      },
+    });
     return null;
   }
 

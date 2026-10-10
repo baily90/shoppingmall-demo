@@ -12,6 +12,9 @@ export interface ReviewRow {
   images: string[] | null;
   anonymous: boolean;
   status: number;
+  /** 商家回复（单条，可覆盖） */
+  replyContent: string | null;
+  replyAt: string | null;
   createdAt: string;
   updatedAt: string;
   product: { id: number; name: string; mainImage: string };
@@ -48,3 +51,7 @@ export const listReviews = (params: ListReviewParams) =>
 
 export const setReviewStatus = (id: number, status: number) =>
   request.post(`/admin/reviews/${id}/status`, { status });
+
+/** 商家回复评价（单条，可覆盖） */
+export const replyReview = (id: number, content: string) =>
+  request.post(`/admin/reviews/${id}/reply`, { content });

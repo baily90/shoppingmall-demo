@@ -12,6 +12,7 @@ import OrderDetailPage from './pages/order-detail';
 import RefundApply from './pages/refund-apply';
 import ReviewApply from './pages/review-apply';
 import ReviewMine from './pages/review-mine';
+import Favorites from './pages/favorites';
 import Mine from './pages/mine';
 import Coupons from './pages/coupons';
 import CouponMine from './pages/coupon-mine';
@@ -116,6 +117,14 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <ReviewMine />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/favorites',
+    element: (
+      <RequireAuth>
+        <Favorites />
       </RequireAuth>
     ),
   },

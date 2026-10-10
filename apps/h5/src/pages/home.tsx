@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { NavBar, SearchBar, Toast } from 'antd-mobile';
+import { Grid, NavBar, SearchBar, Swiper, Toast } from 'antd-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { listBrands, listCategories, listProducts } from '../api/store';
 import type { BrandRow, CategoryNode, StoreProductRow } from '../api/store';
+import { getHomeSlots } from '../api/home';
+import type { HomeSlot } from '../api/home';
 import { getErrorMessage } from '../api/request';
 import CategoryBar from '../components/CategoryBar';
 import ProductCard from '../components/ProductCard';
@@ -10,7 +12,7 @@ import BottomTabBar from '../components/TabBar';
 
 const PAGE_SIZE = 10;
 
-// 首页即商品列表页：分类/品牌/关键词筛选 + 分页加载，底部 TabBar 常驻
+// 首页即商品列表页：轮播 Banner + 金刚区 + 分类/品牌/关键词筛选 + 分页加载，底部 TabBar 常驻
 export default function Home() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -20,6 +22,8 @@ export default function Home() {
   const brandIdNum = brandId ? Number(brandId) : undefined;
   const keyword = searchParams.get('keyword') ?? '';
 
+  const [banners, setBanners] = useState<HomeSlot[]>([]);
+  const [navIcons, setNavIcons] = useState<HomeSlot[]>([]);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [products, setProducts] = useState<StoreProductRow[]>([]);
@@ -36,6 +40,35 @@ export default function Home() {
     }
     setSearchParams(next);
   };
+
+  // 装修位跳转：0 无 / 1 商品 / 2 分类 / 3 秒杀 / 4 外链
+  const handleLink = (linkType: number, linkValue: string | null) => {
+    switch (linkType) {
+      case 1:
+        if (linkValue) navigate(`/product/${linkValue}`);
+        break;
+      case 2:
+        updateParams({ categoryId: linkValue ?? undefined, brandId: undefined });
+        break;
+      case 3:
+        navigate('/seckill');
+        break;
+      case 4:
+        if (linkValue) window.location.href = linkValue;
+        break;
+      default:
+        break;
+    }
+  };
+
+  useEffect(() => {
+    void getHomeSlots()
+      .then((r) => {
+        setBanners(r.data.data.banners);
+        setNavIcons(r.data.data.navIcons);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     void listCategories()
@@ -102,6 +135,34 @@ export default function Home() {
   return (
     <div className="page tab-page">
       <NavBar back={null}>商城</NavBar>
+
+      {banners.length > 0 && (
+        <div className="home-banner">
+          <Swiper autoplay loop>
+            {banners.map((b) => (
+              <Swiper.Item key={b.id} onClick={() => handleLink(b.linkType, b.linkValue)}>
+                <img className="home-banner-img" src={b.image} alt={b.name} />
+              </Swiper.Item>
+            ))}
+          </Swiper>
+        </div>
+      )}
+
+      {navIcons.length > 0 && (
+        <div className="home-nav">
+          <Grid columns={5}>
+            {navIcons.map((n) => (
+              <Grid.Item key={n.id} onClick={() => handleLink(n.linkType, n.linkValue)}>
+                <div className="nav-icon">
+                  <img className="nav-icon-img" src={n.image} alt={n.name} />
+                  <span className="nav-icon-name">{n.name}</span>
+                </div>
+              </Grid.Item>
+            ))}
+          </Grid>
+        </div>
+      )}
+
       <div className="coupon-entry" onClick={() => navigate('/coupons')}>
         <span>🎁 领券中心</span>
         <span className="coupon-entry-arrow">›</span>

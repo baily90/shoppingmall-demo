@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Max,
@@ -11,7 +12,12 @@ import {
   Min,
 } from 'class-validator';
 import { PageQueryDto } from '../../common/dto/query.dto';
-import { MAX_REVIEW_IMAGES, REVIEW_RATING_MAX, REVIEW_RATING_MIN } from '../review.constant';
+import {
+  MAX_REPLY_LENGTH,
+  MAX_REVIEW_IMAGES,
+  REVIEW_RATING_MAX,
+  REVIEW_RATING_MIN,
+} from '../review.constant';
 
 /** 提交商品评价（按订单项） */
 export class CreateReviewDto {
@@ -74,4 +80,12 @@ export class SetReviewStatusDto {
   @Type(() => Number)
   @IsInt({ message: '状态必须为整数' })
   status: number;
+}
+
+/** 管理端回复评价（单条，可覆盖） */
+export class ReplyDto {
+  @IsString({ message: '回复内容必须为字符串' })
+  @IsNotEmpty({ message: '回复内容不能为空' })
+  @MaxLength(MAX_REPLY_LENGTH, { message: `回复内容最多 ${MAX_REPLY_LENGTH} 字` })
+  content: string;
 }

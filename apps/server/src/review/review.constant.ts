@@ -10,3 +10,6 @@ export const REVIEW_RATING_MAX = 5;
 
 /** 单条评价最多可附图数 */
 export const MAX_REVIEW_IMAGES = 9;
+
+/** 商家回复最长字数 */
+export const MAX_REPLY_LENGTH = 500;

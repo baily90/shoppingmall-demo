@@ -21,6 +21,34 @@ export default function ReviewList() {
   const [filterRating, setFilterRating] = useState<number | undefined>();
 
   const [detail, setDetail] = useState<ReviewRow | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [replySubmitting, setReplySubmitting] = useState(false);
+
+  const openDetail = (row: ReviewRow) => {
+    setDetail(row);
+    setReplyText(row.replyContent ?? '');
+  };
+
+  const submitReply = async () => {
+    if (!detail) return;
+    const content = replyText.trim();
+    if (!content) {
+      message.warning('回复内容不能为空');
+      return;
+    }
+    setReplySubmitting(true);
+    try {
+      await reviewApi.replyReview(detail.id, content);
+      message.success('回复成功');
+      // 本地同步，避免整表重查时短暂丢失回复态
+      setDetail({ ...detail, replyContent: content, replyAt: new Date().toISOString() });
+      await load();
+    } catch (e) {
+      message.error(getErrorMessage(e));
+    } finally {
+      setReplySubmitting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -129,6 +157,13 @@ export default function ReviewList() {
       ),
     },
     {
+      title: '回复',
+      dataIndex: 'replyContent',
+      width: 90,
+      render: (v: string | null) =>
+        v ? <Tag color="blue">已回复</Tag> : <Tag color="default">未回复</Tag>,
+    },
+    {
       title: '用户',
       width: 140,
       render: (_, row) => (
@@ -156,7 +191,7 @@ export default function ReviewList() {
       width: 140,
       render: (_, row) => (
         <Space size="small">
-          <Button size="small" onClick={() => setDetail(row)}>
+          <Button size="small" onClick={() => openDetail(row)}>
             详情
           </Button>
           {hasPermission('review:block') && (
@@ -267,6 +302,27 @@ export default function ReviewList() {
               {detail.createdAt.slice(0, 19).replace('T', ' ')}
             </Descriptions.Item>
           </Descriptions>
+        )}
+        {detail && hasPermission('review:reply') && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>商家回复</div>
+            <Input.TextArea
+              rows={4}
+              maxLength={500}
+              showCount
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="回复用户评价（可覆盖原有回复）"
+            />
+            <Button
+              type="primary"
+              style={{ marginTop: 8 }}
+              loading={replySubmitting}
+              onClick={() => void submitReply()}
+            >
+              提交回复
+            </Button>
+          </div>
         )}
       </Drawer>
     </>

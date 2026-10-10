@@ -75,6 +75,17 @@ export default function ReviewMine() {
               <div style={{ marginTop: 6, fontSize: 12, color: '#bbb' }}>
                 {r.createdAt.slice(0, 19).replace('T', ' ')}
               </div>
+              {r.replyContent && (
+                <div className="review-reply">
+                  <span className="review-reply-label">商家回复</span>
+                  <div className="review-reply-content">{r.replyContent}</div>
+                  {r.replyAt && (
+                    <div className="review-reply-time">
+                      {r.replyAt.slice(0, 19).replace('T', ' ')}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

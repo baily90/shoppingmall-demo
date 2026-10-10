@@ -18,6 +18,8 @@ import { CouponModule } from './coupon/coupon.module';
 import { SeckillModule } from './seckill/seckill.module';
 import { RefundModule } from './refund/refund.module';
 import { ReviewModule } from './review/review.module';
+import { FavoriteModule } from './favorite/favorite.module';
+import { HomeModule } from './home/home.module';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 
 @Module({
@@ -48,6 +50,8 @@ import { LoggingMiddleware } from './common/middleware/logging.middleware';
     SeckillModule,
     RefundModule,
     ReviewModule,
+    FavoriteModule,
+    HomeModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -5,6 +5,7 @@ import { getProduct } from '../api/store';
 import type { ProductDetail, Sku } from '../api/store';
 import { listProductReviews } from '../api/review';
 import type { ProductReviewItem } from '../api/review';
+import { addFavorite, getFavoriteStatus, removeFavorite } from '../api/favorite';
 import { addToCart as addToCartApi } from '../api/trade';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
@@ -24,6 +25,15 @@ export default function Detail() {
   const [reviews, setReviews] = useState<ProductReviewItem[]>([]);
   const [reviewTotal, setReviewTotal] = useState(0);
   const [reviewPage, setReviewPage] = useState(1);
+  const [favorited, setFavorited] = useState(false);
+
+  // 已登录时拉取收藏状态（红心初始态）
+  useEffect(() => {
+    if (!user) return;
+    void getFavoriteStatus(Number(id))
+      .then((r) => setFavorited(r.data.data.favorited))
+      .catch(() => {});
+  }, [user, id]);
 
   useEffect(() => {
     void (async () => {
@@ -115,6 +125,28 @@ export default function Detail() {
     return matchedSku;
   };
 
+  // 收藏/取消收藏：未登录先引导登录，已登录幂等切换
+  const toggleFavorite = async () => {
+    if (!user) {
+      Toast.show({ content: '请先登录', icon: 'fail' });
+      navigate('/login', { state: { from: `/product/${id}` } });
+      return;
+    }
+    try {
+      if (favorited) {
+        await removeFavorite(Number(id));
+        setFavorited(false);
+        Toast.show({ content: '已取消收藏', icon: 'success' });
+      } else {
+        await addFavorite(Number(id));
+        setFavorited(true);
+        Toast.show({ content: '已收藏', icon: 'success' });
+      }
+    } catch (e) {
+      Toast.show({ content: getErrorMessage(e), icon: 'fail' });
+    }
+  };
+
   const addToCart = async () => {
     const sku = ensureReady();
     if (!sku) return;
@@ -177,6 +209,14 @@ export default function Detail() {
             <span className="original">{formatPrice(matchedSku.originalPrice)}</span>
           )}
           {!matchedSku && detail.skus.length > 1 && <span className="from">起</span>}
+          <button
+            type="button"
+            className={`detail-fav${favorited ? ' active' : ''}`}
+            onClick={() => void toggleFavorite()}
+          >
+            {favorited ? '♥' : '♡'}
+            <span>{favorited ? '已收藏' : '收藏'}</span>
+          </button>
         </div>
         <h1 className="detail-name">{detail.name}</h1>
         {detail.subTitle && <div className="detail-sub">{detail.subTitle}</div>}
@@ -275,6 +315,13 @@ export default function Detail() {
             <div style={{ marginTop: 6, fontSize: 12, color: '#bbb' }}>
               {r.createdAt.slice(0, 10)}
             </div>
+            {r.replyContent && (
+              <div className="review-reply">
+                <span className="review-reply-label">商家回复</span>
+                <div className="review-reply-content">{r.replyContent}</div>
+                {r.replyAt && <div className="review-reply-time">{r.replyAt.slice(0, 10)}</div>}
+              </div>
+            )}
           </div>
         ))}
         {reviews.length < reviewTotal && (

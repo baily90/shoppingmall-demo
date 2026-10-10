@@ -13,6 +13,7 @@ import ProductList from '../pages/product/product';
 import OrderList from '../pages/order/order';
 import CouponList from '../pages/marketing/coupon';
 import SeckillList from '../pages/marketing/seckill';
+import HomeSlotList from '../pages/marketing/home';
 import RefundList from '../pages/aftersale/refund';
 import ReviewList from '../pages/review/review';
 import Forbidden from '../pages/403';
@@ -111,6 +112,14 @@ export const router = createBrowserRouter([
         element: (
           <WithPermission permission="seckill:list">
             <SeckillList />
+          </WithPermission>
+        ),
+      },
+      {
+        path: 'marketing/home',
+        element: (
+          <WithPermission permission="home:list">
+            <HomeSlotList />
           </WithPermission>
         ),
       },

@@ -22,6 +22,9 @@ export interface ProductReviewItem {
   skuSpec: string;
   /** 是否当前登录用户自己的评价（用于详情页置顶 + 「我的评价」标签） */
   mine: boolean;
+  /** 商家回复（单条，可能为 null） */
+  replyContent: string | null;
+  replyAt: string | null;
   createdAt: string;
 }
 
@@ -38,6 +41,9 @@ export interface MyReviewItem {
   status: number;
   product: { id: number; name: string; mainImage: string };
   skuSpec: string;
+  /** 商家回复（单条，可能为 null） */
+  replyContent: string | null;
+  replyAt: string | null;
   createdAt: string;
 }
 
