@@ -122,7 +122,12 @@ export interface CreateOrderPayload {
 
 export const createOrder = (data: CreateOrderPayload) =>
   request.post<ApiResponse<{ id: number; orderNo: string }>>('/orders', data);
-export const listOrders = (params: { page?: number; pageSize?: number; status?: number }) =>
+export const listOrders = (params: {
+  page?: number;
+  pageSize?: number;
+  status?: number;
+  refundActive?: boolean;
+}) =>
   request.get<ApiResponse<{ list: OrderSummary[]; total: number; page: number; pageSize: number }>>(
     '/orders',
     { params },

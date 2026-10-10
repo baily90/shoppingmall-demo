@@ -9,6 +9,7 @@ const ORDER_SHORTCUTS = [
   { status: '10', label: '待支付', icon: '💰' },
   { status: '20', label: '待发货', icon: '📦' },
   { status: '30', label: '待收货', icon: '🚚' },
+  { status: 'aftersale', label: '退款/售后', icon: '🔁' },
   { status: '40', label: '已完成', icon: '✅' },
 ];
 

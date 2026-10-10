@@ -3,11 +3,14 @@ import { Button, Form, Input, NavBar, Popup, Toast } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { cancelOrder, confirmOrder, getOrder, ORDER_STATUS_TEXT, payOrder } from '../api/trade';
 import type { OrderDetail } from '../api/trade';
-import { REFUND_STATUS_TEXT, REFUND_TYPE_TEXT, shipBackRefund } from '../api/refund';
+import {
+  ACTIVE_REFUND_STATUSES,
+  REFUND_STATUS_TEXT,
+  REFUND_TYPE_TEXT,
+  shipBackRefund,
+} from '../api/refund';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
-
-const ACTIVE_REFUND_STATUS = [10, 20, 30];
 
 const formatCountdown = (ms: number) => {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -73,7 +76,7 @@ export default function OrderDetailPage() {
 
   const refunds = order?.refunds ?? [];
   const latestRefund = refunds[0] ?? null;
-  const activeRefund = refunds.find((r) => ACTIVE_REFUND_STATUS.includes(r.status)) ?? null;
+  const activeRefund = refunds.find((r) => ACTIVE_REFUND_STATUSES.includes(r.status)) ?? null;
 
   const handleShipBack = async () => {
     let values: { logisticsCompany: string; logisticsNo: string };
@@ -108,7 +111,9 @@ export default function OrderDetailPage() {
   return (
     <div className="page">
       <NavBar onBack={() => navigate(-1)}>订单详情</NavBar>
-      <div className="od-status">{ORDER_STATUS_TEXT[order.status]}</div>
+      <div className="od-status">
+        {activeRefund ? REFUND_STATUS_TEXT[activeRefund.status] : ORDER_STATUS_TEXT[order.status]}
+      </div>
       {order.status === 10 && remainMs > 0 && (
         <div className="od-countdown">支付剩余 {formatCountdown(remainMs)}，超时自动取消</div>
       )}

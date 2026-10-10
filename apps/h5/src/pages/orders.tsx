@@ -3,6 +3,7 @@ import { Button, NavBar, Tabs, Toast } from 'antd-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { cancelOrder, confirmOrder, listOrders, ORDER_STATUS_TEXT, payOrder } from '../api/trade';
 import type { OrderSummary } from '../api/trade';
+import { ACTIVE_REFUND_STATUSES, REFUND_STATUS_TEXT } from '../api/refund';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
 
@@ -11,9 +12,18 @@ const TABS = [
   { key: '10', title: '待支付' },
   { key: '20', title: '待发货' },
   { key: '30', title: '待收货' },
+  { key: 'aftersale', title: '退款/售后' },
   { key: '40', title: '已完成' },
   { key: '50', title: '已取消' },
 ];
+
+/** 订单是否有进行中的售后（展示层派生「售后中」，冻结确认收货等操作） */
+const hasActiveRefund = (o: OrderSummary) =>
+  !!o.refund && ACTIVE_REFUND_STATUSES.includes(o.refund.status);
+
+/** 列表卡片状态文案：进行中售后优先显示售后子状态，否则显示订单状态 */
+const orderStatusText = (o: OrderSummary) =>
+  hasActiveRefund(o) ? REFUND_STATUS_TEXT[o.refund!.status] : ORDER_STATUS_TEXT[o.status];
 
 export default function Orders() {
   const navigate = useNavigate();
@@ -26,11 +36,21 @@ export default function Orders() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await listOrders({
+      const params: { page: number; pageSize: number; status?: number; refundActive?: boolean } = {
         page: 1,
         pageSize: 50,
-        status: tab === 'all' ? undefined : Number(tab),
-      });
+      };
+      if (tab === 'aftersale') {
+        // 退款/售后：只看有进行中售后的订单（订单状态可能是待发货/待收货）
+        params.refundActive = true;
+      } else if (tab === '20' || tab === '30') {
+        // 待发货/待收货：排除售后中的订单，它们归属「退款/售后」tab
+        params.status = Number(tab);
+        params.refundActive = false;
+      } else if (tab !== 'all') {
+        params.status = Number(tab);
+      }
+      const res = await listOrders(params);
       setList(res.data.data.list);
     } catch (e) {
       Toast.show({ content: getErrorMessage(e), icon: 'fail' });
@@ -72,7 +92,7 @@ export default function Orders() {
             <div key={o.id} className="order-card" onClick={() => navigate(`/order/${o.id}`)}>
               <div className="order-head">
                 <span>{o.orderNo}</span>
-                <span className="order-status">{ORDER_STATUS_TEXT[o.status]}</span>
+                <span className="order-status">{orderStatusText(o)}</span>
               </div>
               <div className="order-body">
                 {o.firstImage && <img className="order-img" src={o.firstImage} alt="" />}
@@ -109,7 +129,7 @@ export default function Orders() {
                       </Button>
                     </>
                   )}
-                  {o.status === 30 && (
+                  {o.status === 30 && !hasActiveRefund(o) && (
                     <Button
                       size="small"
                       color="primary"

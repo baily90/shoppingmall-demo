@@ -38,6 +38,9 @@ export const REFUND_STATUS_TEXT: Record<number, string> = {
   90: '已拒绝',
 };
 
+/** 进行中的售后状态（订单处于售后流程中，展示层据此派生「售后中」状态、冻结订单操作） */
+export const ACTIVE_REFUND_STATUSES = [10, 20, 30];
+
 export const applyRefund = (data: { orderId: number; reason: string; description?: string }) =>
   request.post<ApiResponse<Refund>>('/refunds', data);
 

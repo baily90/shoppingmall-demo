@@ -1,7 +1,8 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -54,6 +55,16 @@ export class ListOrderDto extends PageQueryDto {
   @Type(() => Number)
   @IsInt({ message: '状态必须为整数' })
   status?: number;
+
+  /**
+   * 是否按「进行中售后」过滤：true 只看有进行中售后的（退款/售后 tab），
+   * false 只看无进行中售后的（待发货/待收货 tab 要排除售后中的订单）。
+   * 用 @Transform 手动解析，避免 Boolean('false') === true 的坑。
+   */
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean({ message: 'refundActive 必须为布尔值' })
+  refundActive?: boolean;
 }
 
 export class ShipOrderDto {

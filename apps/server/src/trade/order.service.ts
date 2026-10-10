@@ -9,6 +9,7 @@ import { BusinessException } from '../common/exceptions/business.exception';
 import { PAYMENT_SERVICE, PaymentService } from '../payment/payment.service';
 import { CouponService } from '../coupon/coupon.service';
 import { SeckillService } from '../seckill/seckill.service';
+import { ACTIVE_REFUND_STATUSES } from '../refund/refund.constant';
 import { CreateOrderDto, ListOrderDto, ShipOrderDto } from './dto/order.dto';
 import {
   AUTO_CANCEL_JOB,
@@ -401,10 +402,21 @@ export class OrderService {
     if (order.status !== OrderStatus.SHIPPED) {
       throw new BusinessException(ErrorCode.ORDER_STATE_INVALID, '仅已发货订单可确认收货');
     }
-    await this.prisma.order.update({
-      where: { id: orderId },
+    // 原子校验「无进行中售后」：售后进行中冻结确认收货，防止「订单已完成 + 退款成功」的撕裂状态
+    const res = await this.prisma.order.updateMany({
+      where: {
+        id: orderId,
+        status: OrderStatus.SHIPPED,
+        refunds: { none: { status: { in: ACTIVE_REFUND_STATUSES } } },
+      },
       data: { status: OrderStatus.COMPLETED, completedAt: new Date() },
     });
+    if (res.count === 0) {
+      throw new BusinessException(
+        ErrorCode.ORDER_STATE_INVALID,
+        '订单有进行中的售后，暂不可确认收货',
+      );
+    }
     return null;
   }
 
@@ -414,6 +426,13 @@ export class OrderService {
     const where: Prisma.OrderWhereInput = {
       userId,
       ...(query.status !== undefined ? { status: query.status } : {}),
+      ...(query.refundActive !== undefined
+        ? {
+            refunds: query.refundActive
+              ? { some: { status: { in: ACTIVE_REFUND_STATUSES } } }
+              : { none: { status: { in: ACTIVE_REFUND_STATUSES } } },
+          }
+        : {}),
     };
 
     const [orders, total] = await Promise.all([
@@ -448,15 +467,38 @@ export class OrderService {
     };
   }
 
-  /** 各状态订单数（用于「我的」页角标） */
+  /** 各状态订单数（用于「我的」页角标）：待发货/待收货排除进行中售后，另计「退款/售后」 */
   async counts(userId: number) {
-    const rows = await this.prisma.order.groupBy({
-      by: ['status'],
-      where: { userId },
-      _count: { status: true },
-    });
+    const [rows, paidPure, shippedPure, aftersale] = await Promise.all([
+      this.prisma.order.groupBy({
+        by: ['status'],
+        where: { userId },
+        _count: { status: true },
+      }),
+      this.prisma.order.count({
+        where: {
+          userId,
+          status: OrderStatus.PAID,
+          refunds: { none: { status: { in: ACTIVE_REFUND_STATUSES } } },
+        },
+      }),
+      this.prisma.order.count({
+        where: {
+          userId,
+          status: OrderStatus.SHIPPED,
+          refunds: { none: { status: { in: ACTIVE_REFUND_STATUSES } } },
+        },
+      }),
+      this.prisma.order.count({
+        where: { userId, refunds: { some: { status: { in: ACTIVE_REFUND_STATUSES } } } },
+      }),
+    ]);
     const statusCounts: Record<string, number> = {};
     for (const r of rows) statusCounts[String(r.status)] = r._count.status;
+    // 待发货/待收货的角标要排除进行中售后，避免与对应 tab 实际列表不一致
+    statusCounts[String(OrderStatus.PAID)] = paidPure;
+    statusCounts[String(OrderStatus.SHIPPED)] = shippedPure;
+    statusCounts.aftersale = aftersale;
     const total = rows.reduce((sum, r) => sum + r._count.status, 0);
     return { total, statusCounts };
   }
@@ -527,8 +569,13 @@ export class OrderService {
     if (order.status !== OrderStatus.PAID) {
       throw new BusinessException(ErrorCode.ORDER_STATE_INVALID, '仅已支付订单可发货');
     }
-    await this.prisma.order.update({
-      where: { id: orderId },
+    // 原子校验「无进行中售后」：待发货订单有进行中仅退款时冻结发货
+    const res = await this.prisma.order.updateMany({
+      where: {
+        id: orderId,
+        status: OrderStatus.PAID,
+        refunds: { none: { status: { in: ACTIVE_REFUND_STATUSES } } },
+      },
       data: {
         status: OrderStatus.SHIPPED,
         logisticsCompany: dto.logisticsCompany,
@@ -536,6 +583,9 @@ export class OrderService {
         shippedAt: new Date(),
       },
     });
+    if (res.count === 0) {
+      throw new BusinessException(ErrorCode.ORDER_STATE_INVALID, '订单有进行中的售后，暂不可发货');
+    }
     return null;
   }
 
