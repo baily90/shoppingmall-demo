@@ -1,6 +1,7 @@
 import type { ApiResponse } from '@mall/shared';
 import request from './request';
 import type { Refund } from './refund';
+import type { OrderItemReview } from './review';
 
 // ==================== 地址 ====================
 export interface Address {
@@ -80,6 +81,8 @@ export interface OrderItem {
   price: number;
   quantity: number;
   totalAmount: number;
+  /** 该订单项的评价（null 表示未评价） */
+  review: OrderItemReview | null;
 }
 
 export interface OrderDetail {

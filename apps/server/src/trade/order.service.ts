@@ -507,7 +507,8 @@ export class OrderService {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        items: true,
+        // 带上每个订单项的评价（null 表示未评价），H5 据此渲染「待评价/已评价」
+        items: { include: { review: true } },
         userCoupon: { include: { coupon: true } },
         refunds: { orderBy: { id: 'desc' } },
       },

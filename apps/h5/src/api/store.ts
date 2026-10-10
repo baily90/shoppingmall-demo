@@ -28,6 +28,8 @@ export interface StoreProductRow {
   mainImage: string;
   price: number | null;
   originalPrice: number | null;
+  reviewCount: number;
+  ratingAvg: number;
 }
 
 export interface StoreProductList {
@@ -77,6 +79,8 @@ export interface ProductDetail {
   images: { id: number; url: string; sort: number }[];
   specGroups: SpecGroup[];
   skus: Sku[];
+  reviewCount: number;
+  ratingAvg: number;
 }
 
 export const listCategories = () => request.get<ApiResponse<CategoryNode[]>>('/categories');

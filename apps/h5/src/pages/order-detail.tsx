@@ -211,7 +211,10 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {(order.status === 10 || order.status === 20 || order.status === 30) && (
+      {(order.status === 10 ||
+        order.status === 20 ||
+        order.status === 30 ||
+        order.status === 40) && (
         <div className="od-actions">
           {order.status === 10 && (
             <>
@@ -241,6 +244,11 @@ export default function OrderDetailPage() {
           )}
           {!activeRefund && order.status === 30 && (
             <Button onClick={() => navigate(`/order/${order.id}/refund`)}>申请退货退款</Button>
+          )}
+          {order.status === 40 && order.items.some((it) => !it.review) && (
+            <Button color="primary" onClick={() => navigate(`/order/${order.id}/review`)}>
+              评价
+            </Button>
           )}
           {activeRefund?.status === 20 && (
             <Button color="primary" onClick={() => setShipBackVisible(true)}>

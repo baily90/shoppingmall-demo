@@ -86,6 +86,7 @@ export default function Mine() {
 
       <List className="mine-menu">
         <List.Item onClick={() => navigate('/coupons/mine')}>我的券</List.Item>
+        <List.Item onClick={() => navigate('/reviews/mine')}>我的评价</List.Item>
         <List.Item onClick={() => navigate('/address')}>地址管理</List.Item>
       </List>
       {user && (

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, NavBar, Stepper, Swiper, Tag, Toast } from 'antd-mobile';
+import { Button, NavBar, Rate, Stepper, Swiper, Tag, Toast } from 'antd-mobile';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getProduct } from '../api/store';
 import type { ProductDetail, Sku } from '../api/store';
+import { listProductReviews } from '../api/review';
+import type { ProductReviewItem } from '../api/review';
 import { addToCart as addToCartApi } from '../api/trade';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
@@ -19,6 +21,9 @@ export default function Detail() {
   // 已选规格：groupId -> specValueId
   const [selected, setSelected] = useState<Record<number, number>>({});
   const [quantity, setQuantity] = useState(1);
+  const [reviews, setReviews] = useState<ProductReviewItem[]>([]);
+  const [reviewTotal, setReviewTotal] = useState(0);
+  const [reviewPage, setReviewPage] = useState(1);
 
   useEffect(() => {
     void (async () => {
@@ -29,6 +34,22 @@ export default function Detail() {
         Toast.show({ content: getErrorMessage(e), icon: 'fail' });
       }
     })();
+  }, [id]);
+
+  const loadReviews = async (page: number) => {
+    try {
+      const res = await listProductReviews(Number(id), { page, pageSize: 10 });
+      const d = res.data.data;
+      setReviews((prev) => (page === 1 ? d.list : [...prev, ...d.list]));
+      setReviewTotal(d.total);
+      setReviewPage(page);
+    } catch (e) {
+      Toast.show({ content: getErrorMessage(e), icon: 'fail' });
+    }
+  };
+  useEffect(() => {
+    void loadReviews(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // 进入页面默认选中第一个 SKU 对应的规格，点击「加入购物车/立即购买」即可直接下单
@@ -48,6 +69,12 @@ export default function Detail() {
     const list = detail.images.length ? detail.images.map((i) => i.url) : [detail.mainImage];
     return list.length ? list : [];
   }, [detail]);
+
+  // 置顶当前用户自己的评价（「我的评价」），其余按时间倒序保持原序
+  const sortedReviews = useMemo(
+    () => [...reviews].sort((a, b) => Number(b.mine) - Number(a.mine)),
+    [reviews],
+  );
 
   // 已选全所有规格 → 匹配到唯一 SKU
   const matchedSku: Sku | null = useMemo(() => {
@@ -198,6 +225,69 @@ export default function Detail() {
           <div className="detail-desc-content">{detail.detail}</div>
         </div>
       )}
+
+      <div className="detail-desc">
+        <div className="detail-desc-title">商品评价（{detail.reviewCount}）</div>
+        {detail.reviewCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 22, fontWeight: 700, color: '#ff4d4f' }}>
+              {detail.ratingAvg.toFixed(1)}
+            </span>
+            <Rate readOnly allowHalf value={Math.round(detail.ratingAvg * 2) / 2} />
+          </div>
+        )}
+        {reviews.length === 0 && <div className="empty">暂无评价</div>}
+        {sortedReviews.map((r) => (
+          <div key={r.id} style={{ padding: '10px 0', borderTop: '1px solid #f5f5f5' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span
+                style={{
+                  fontSize: 13,
+                  color: '#999',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                {r.nickname}
+                {r.skuSpec ? ` · ${r.skuSpec}` : ''}
+                {r.mine && (
+                  <Tag color="primary" fill="outline">
+                    我的评价
+                  </Tag>
+                )}
+              </span>
+              <Rate readOnly value={r.rating} style={{ '--star-size': '12px' }} />
+            </div>
+            {r.content && <div style={{ marginTop: 6, fontSize: 14 }}>{r.content}</div>}
+            {r.images.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                {r.images.map((url, idx) => (
+                  <img
+                    key={idx}
+                    src={url}
+                    alt=""
+                    style={{ width: 72, height: 72, objectFit: 'contain', borderRadius: 4 }}
+                  />
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: 6, fontSize: 12, color: '#bbb' }}>
+              {r.createdAt.slice(0, 10)}
+            </div>
+          </div>
+        ))}
+        {reviews.length < reviewTotal && (
+          <Button
+            block
+            size="small"
+            style={{ marginTop: 8 }}
+            onClick={() => void loadReviews(reviewPage + 1)}
+          >
+            加载更多评价
+          </Button>
+        )}
+      </div>
 
       <div className="detail-footer">
         <Button

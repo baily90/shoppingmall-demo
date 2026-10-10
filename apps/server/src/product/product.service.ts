@@ -82,6 +82,8 @@ export class ProductService {
           name: true,
           subTitle: true,
           mainImage: true,
+          reviewCount: true,
+          ratingSum: true,
           skus: {
             where: { status: 1 },
             orderBy: { price: 'asc' },
@@ -104,6 +106,8 @@ export class ProductService {
         mainImage: p.mainImage,
         price: p.skus[0]?.price ?? null,
         originalPrice: p.skus[0]?.originalPrice ?? null,
+        reviewCount: p.reviewCount,
+        ratingAvg: this.ratingAvg(p.reviewCount, p.ratingSum),
       })),
       total,
       page,
@@ -299,8 +303,11 @@ export class ProductService {
       },
     });
 
+    // 评分聚合：ratingAvg 由 ratingSum/reviewCount 实时计算（ratingSum 不对 C 端透出）
+    const { ratingSum, ...productBase } = product;
     const detail = {
-      ...product,
+      ...productBase,
+      ratingAvg: this.ratingAvg(product.reviewCount, product.ratingSum),
       skus: product.skus.map((sku) => ({
         id: sku.id,
         price: sku.price,
@@ -326,6 +333,11 @@ export class ProductService {
   /** 笛卡尔积：[[a,b],[1,2]] → [[a,1],[a,2],[b,1],[b,2]]；空数组 → [[]] */
   private cartesian<T>(arrays: T[][]): T[][] {
     return arrays.reduce<T[][]>((acc, cur) => acc.flatMap((a) => cur.map((c) => [...a, c])), [[]]);
+  }
+
+  /** 平均评分：count/sum 精确计算，四舍五入到 1 位小数（无评价时为 0） */
+  private ratingAvg(count: number, sum: number): number {
+    return count > 0 ? Math.round((sum / count) * 10) / 10 : 0;
   }
 
   private async ensureProduct(id: number) {

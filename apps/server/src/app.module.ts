@@ -17,6 +17,7 @@ import { StatsModule } from './stats/stats.module';
 import { CouponModule } from './coupon/coupon.module';
 import { SeckillModule } from './seckill/seckill.module';
 import { RefundModule } from './refund/refund.module';
+import { ReviewModule } from './review/review.module';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 
 @Module({
@@ -46,6 +47,7 @@ import { LoggingMiddleware } from './common/middleware/logging.middleware';
     CouponModule,
     SeckillModule,
     RefundModule,
+    ReviewModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

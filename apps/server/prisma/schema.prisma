@@ -102,6 +102,7 @@ model User {
   orders      Order[]
   userCoupons UserCoupon[]
   refunds     RefundOrder[]
+  reviews     ProductReview[]
 
   @@map("user")
 }
@@ -171,6 +172,8 @@ model Product {
   detail     String?
   status     Int       @default(1)
   sort       Int       @default(0)
+  reviewCount Int      @default(0) @map("review_count")
+  ratingSum  Int       @default(0) @map("rating_sum")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
   deletedAt  DateTime? @map("deleted_at")
@@ -180,6 +183,7 @@ model Product {
   specGroups ProductSpecGroup[]
   skus       ProductSku[]
   images     ProductImage[]
+  reviews    ProductReview[]
 
   @@index([categoryId])
   @@index([brandId])
@@ -308,6 +312,7 @@ model Order {
   items    OrderItem[]
   payments Payment[]
   refunds  RefundOrder[]
+  reviews  ProductReview[]
   userCoupon UserCoupon? @relation(fields: [couponId], references: [id])
 
   @@index([userId, status])
@@ -330,13 +335,40 @@ model OrderItem {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  order Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  sku   ProductSku @relation(fields: [skuId], references: [id])
+  order  Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sku    ProductSku    @relation(fields: [skuId], references: [id])
+  review ProductReview?
 
   @@index([orderId])
   @@index([skuId])
   @@index([activityId])
   @@map("order_items")
+}
+
+/// 商品评价：按订单项（orderItemId 唯一），一订单多商品各评各的；先发后审（status 1 展示 / 0 屏蔽）
+model ProductReview {
+  id          Int       @id @default(autoincrement())
+  orderId     Int       @map("order_id")
+  orderItemId Int       @map("order_item_id")
+  userId      Int       @map("user_id")
+  productId   Int       @map("product_id")
+  rating      Int // 1~5 星
+  content     String?
+  images      Json? // 图片 URL 数组（string[]）
+  anonymous   Boolean   @default(false) @map("is_anonymous")
+  status      Int       @default(1) // 1 正常展示 / 0 已屏蔽
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  order     Order     @relation(fields: [orderId], references: [id])
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+
+  @@unique([orderItemId])
+  @@index([productId, status, createdAt])
+  @@index([userId])
+  @@map("product_review")
 }
 
 model Payment {

@@ -14,6 +14,7 @@ import OrderList from '../pages/order/order';
 import CouponList from '../pages/marketing/coupon';
 import SeckillList from '../pages/marketing/seckill';
 import RefundList from '../pages/aftersale/refund';
+import ReviewList from '../pages/review/review';
 import Forbidden from '../pages/403';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -118,6 +119,14 @@ export const router = createBrowserRouter([
         element: (
           <WithPermission permission="aftersale:list">
             <RefundList />
+          </WithPermission>
+        ),
+      },
+      {
+        path: 'review/list',
+        element: (
+          <WithPermission permission="review:list">
+            <ReviewList />
           </WithPermission>
         ),
       },

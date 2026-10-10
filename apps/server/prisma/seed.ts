@@ -189,6 +189,25 @@ const permissionDefs: PermDef[] = [
       },
     ],
   },
+  {
+    code: 'review',
+    name: '评价管理',
+    type: 1,
+    path: '/review',
+    icon: 'StarOutlined',
+    sort: 6,
+    children: [
+      {
+        code: 'review:list',
+        name: '评价列表',
+        type: 2,
+        path: '/review/list',
+        icon: 'CommentOutlined',
+        sort: 1,
+        children: [{ code: 'review:block', name: '屏蔽评价', type: 3, sort: 1 }],
+      },
+    ],
+  },
 ];
 
 async function createPermission(

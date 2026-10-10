@@ -10,6 +10,8 @@ import AddressEdit from './pages/address-edit';
 import Orders from './pages/orders';
 import OrderDetailPage from './pages/order-detail';
 import RefundApply from './pages/refund-apply';
+import ReviewApply from './pages/review-apply';
+import ReviewMine from './pages/review-mine';
 import Mine from './pages/mine';
 import Coupons from './pages/coupons';
 import CouponMine from './pages/coupon-mine';
@@ -98,6 +100,22 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <RefundApply />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/order/:id/review',
+    element: (
+      <RequireAuth>
+        <ReviewApply />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/reviews/mine',
+    element: (
+      <RequireAuth>
+        <ReviewMine />
       </RequireAuth>
     ),
   },
