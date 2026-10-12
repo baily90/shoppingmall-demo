@@ -142,8 +142,7 @@ export default function HomeSlotList() {
     }
     setSubmitting(true);
     try {
-      const payload: HomeSlotPayload = {
-        type: activeType,
+      const payload: Omit<HomeSlotPayload, 'type'> = {
         name: values.name.trim(),
         image: values.image,
         linkType: values.linkType ?? 0,
@@ -156,10 +155,11 @@ export default function HomeSlotList() {
         payload.linkValue = undefined;
       }
       if (editing) {
+        // type 是装修位的固有属性（轮播图/金刚区由所在 Tab 决定），编辑时不改也不传
         await homeApi.updateHomeSlot(editing.id, payload);
         message.success('保存成功');
       } else {
-        await homeApi.createHomeSlot(payload);
+        await homeApi.createHomeSlot({ ...payload, type: activeType });
         message.success('新增成功');
       }
       setModalOpen(false);
