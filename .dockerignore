@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.git
+.gitignore
+**/.env
+**/.env.*
+*.log
+docker-compose*.yml
