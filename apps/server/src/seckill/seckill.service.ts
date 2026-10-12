@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import {
   SECKILL_CREATE_ORDER_JOB,
@@ -66,6 +67,7 @@ export class SeckillService {
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
     @InjectQueue(SECKILL_QUEUE) private readonly seckillQueue: Queue<SeckillJobData>,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
   // ---------- C 端 ----------
@@ -108,7 +110,7 @@ export class SeckillService {
           skuId: sku.id,
           productId: sku.product.id,
           productName: sku.product.name,
-          productImage: sku.image ?? sku.product.mainImage,
+          productImage: this.storage.toPublicUrl(sku.image ?? sku.product.mainImage)!,
           skuSpec: this.specText(sku.specValues),
           seckillPrice: item.seckillPrice,
           originalPrice: sku.price,
@@ -290,7 +292,19 @@ export class SeckillService {
       },
     });
     if (!activity) throw new BusinessException(ErrorCode.NOT_FOUND, '秒杀活动不存在');
-    return activity;
+    return {
+      ...activity,
+      skus: activity.skus.map((item) => ({
+        ...item,
+        sku: {
+          ...item.sku,
+          product: {
+            ...item.sku.product,
+            mainImage: this.storage.toPublicUrl(item.sku.product.mainImage),
+          },
+        },
+      })),
+    };
   }
 
   async createActivity(dto: CreateSeckillActivityDto) {

@@ -1,12 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { AddCartItemDto, UpdateCartItemDto } from './dto/cart.dto';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class CartService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
+  ) {}
 
   async list(userId: number) {
     const items = await this.prisma.cart.findMany({
@@ -31,7 +35,7 @@ export class CartService {
       skuId: i.skuId,
       productId: i.sku.product.id,
       name: i.sku.product.name,
-      image: i.sku.image ?? i.sku.product.mainImage,
+      image: this.storage.toPublicUrl(i.sku.image ?? i.sku.product.mainImage),
       spec: i.sku.specValues
         .map((sv) => `${sv.specValue.group.name}:${sv.specValue.value}`)
         .join(' / '),

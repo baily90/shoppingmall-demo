@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { ErrorCode } from '@mall/shared';
 import { BusinessException } from '../common/exceptions/business.exception';
@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PermissionService } from '../permission/permission.service';
 import { TokenService } from './token.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class AdminAuthService {
@@ -13,6 +14,7 @@ export class AdminAuthService {
     private readonly prisma: PrismaService,
     private readonly permissionService: PermissionService,
     private readonly tokenService: TokenService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
   async login(dto: AdminLoginDto) {
@@ -39,7 +41,7 @@ export class AdminAuthService {
         id: admin.id,
         username: admin.username,
         nickname: admin.nickname,
-        avatar: admin.avatar,
+        avatar: this.storage.toPublicUrl(admin.avatar),
       },
     };
   }
@@ -71,7 +73,7 @@ export class AdminAuthService {
       id: admin.id,
       username: admin.username,
       nickname: admin.nickname,
-      avatar: admin.avatar,
+      avatar: this.storage.toPublicUrl(admin.avatar),
       roles: admin.roles.map((ur) => ur.role.code),
       permissions,
       menus,

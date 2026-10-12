@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { ErrorCode } from '@mall/shared';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from './token.service';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { RegisterDto } from './dto/register.dto';
 import { UserLoginDto } from './dto/user-login.dto';
 
@@ -12,6 +13,7 @@ export class UserAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenService: TokenService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -32,7 +34,12 @@ export class UserAuthService {
     const tokens = await this.tokenService.issueTokens(user.id, 'user');
     return {
       ...tokens,
-      user: { id: user.id, phone: user.phone, nickname: user.nickname, avatar: user.avatar },
+      user: {
+        id: user.id,
+        phone: user.phone,
+        nickname: user.nickname,
+        avatar: this.storage.toPublicUrl(user.avatar),
+      },
     };
   }
 
@@ -54,7 +61,12 @@ export class UserAuthService {
 
     return {
       ...tokens,
-      user: { id: user.id, phone: user.phone, nickname: user.nickname, avatar: user.avatar },
+      user: {
+        id: user.id,
+        phone: user.phone,
+        nickname: user.nickname,
+        avatar: this.storage.toPublicUrl(user.avatar),
+      },
     };
   }
 
@@ -76,7 +88,7 @@ export class UserAuthService {
       id: user.id,
       phone: user.phone,
       nickname: user.nickname,
-      avatar: user.avatar,
+      avatar: this.storage.toPublicUrl(user.avatar),
       gender: user.gender,
     };
   }

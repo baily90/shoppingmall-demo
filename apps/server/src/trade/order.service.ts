@@ -7,6 +7,7 @@ import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { PAYMENT_SERVICE, PaymentService } from '../payment/payment.service';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { CouponService } from '../coupon/coupon.service';
 import { SeckillService } from '../seckill/seckill.service';
 import { ACTIVE_REFUND_STATUSES } from '../refund/refund.constant';
@@ -31,6 +32,7 @@ export class OrderService {
     private readonly couponService: CouponService,
     @Inject(forwardRef(() => SeckillService)) private readonly seckillService: SeckillService,
     @InjectQueue(ORDER_QUEUE) private readonly orderQueue: Queue,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
     configService: ConfigService,
   ) {
     this.payTimeoutMs =
@@ -455,7 +457,7 @@ export class OrderService {
         payAmount: o.payAmount,
         discountAmount: o.discountAmount,
         itemCount: o.items.reduce((s, i) => s + i.quantity, 0),
-        firstImage: o.items[0]?.productImage ?? null,
+        firstImage: this.storage.toPublicUrl(o.items[0]?.productImage ?? null),
         firstName: o.items[0]?.productName ?? '',
         refund: o.refunds[0] ?? null, // 最新一笔售后（可能为 null）
         createdAt: o.createdAt,
@@ -516,7 +518,14 @@ export class OrderService {
     if (!order || order.userId !== userId) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '订单不存在');
     }
-    return { ...order, payExpireAt: this.payExpireAt(order.createdAt) };
+    return {
+      ...order,
+      items: order.items.map((it) => ({
+        ...it,
+        productImage: this.storage.toPublicUrl(it.productImage),
+      })),
+      payExpireAt: this.payExpireAt(order.createdAt),
+    };
   }
 
   // ---------- 管理端 ----------
@@ -544,7 +553,18 @@ export class OrderService {
       this.prisma.order.count({ where }),
     ]);
 
-    return { list, total, page, pageSize };
+    return {
+      list: list.map((o) => ({
+        ...o,
+        items: o.items.map((it) => ({
+          ...it,
+          productImage: this.storage.toPublicUrl(it.productImage),
+        })),
+      })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async adminDetail(orderId: number) {
@@ -559,7 +579,13 @@ export class OrderService {
     if (!order) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '订单不存在');
     }
-    return order;
+    return {
+      ...order,
+      items: order.items.map((it) => ({
+        ...it,
+        productImage: this.storage.toPublicUrl(it.productImage),
+      })),
+    };
   }
 
   async ship(orderId: number, dto: ShipOrderDto) {

@@ -11,6 +11,18 @@ export interface StorageService {
 
   /** 删除对象 */
   delete(key: string): Promise<void>;
+
+  /**
+   * 写侧：把客户端回传的完整 URL 归一化成 key。
+   * 已是 key 或外部 http 链接则原样返回（幂等），DB 只存 key。
+   */
+  urlToKey(value: string | null | undefined): string | null | undefined;
+
+  /**
+   * 读侧：幂等拼 URL。已是绝对地址（旧数据 / 外部链接）直接透传，否则拼 publicUrl。
+   * 存量未迁移的行、外部图片地址都能正常显示。
+   */
+  toPublicUrl(value: string | null | undefined): string | null | undefined;
 }
 
 export const STORAGE_SERVICE = 'STORAGE_SERVICE';

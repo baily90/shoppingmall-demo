@@ -10,6 +10,8 @@
     "lint": "oxlint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:images": "ts-node scripts/migrate-image-keys.ts",
     "prisma:seed": "prisma db seed",
     "prisma:studio": "prisma studio"
   },
@@ -51,6 +53,7 @@
     "@types/node": "^24.0.0",
     "@types/passport": "^1.0.17",
     "@types/passport-jwt": "^4.0.1",
+    "dotenv": "^18.0.7",
     "oxlint": "^1.0.0",
     "prisma": "^6.0.0",
     "ts-node": "^10.9.2",

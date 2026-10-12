@@ -71,6 +71,23 @@ export class MinioStorageService implements StorageService, OnModuleInit {
     return `${this.publicUrl}/${this.bucket}/${key}`;
   }
 
+  urlToKey(value: string | null | undefined): string | null | undefined {
+    if (!value) return value;
+    const prefix = `${this.publicUrl}/${this.bucket}/`;
+    if (value.startsWith(prefix)) return value.slice(prefix.length);
+    // 兜底：path-style 但 publicUrl 主机不同（如经 CDN 域名回传），按 /bucket/ 边界截断
+    const marker = `/${this.bucket}/`;
+    const idx = value.indexOf(marker);
+    if (idx >= 0) return value.slice(idx + marker.length);
+    return value; // 已是 key / 外部 http 链接
+  }
+
+  toPublicUrl(value: string | null | undefined): string | null | undefined {
+    if (!value) return value;
+    if (/^https?:\/\//.test(value)) return value; // 已是绝对地址（旧数据/外部链接）透传
+    return this.getUrl(value);
+  }
+
   async delete(key: string): Promise<void> {
     await this.client.removeObject(this.bucket, key);
   }

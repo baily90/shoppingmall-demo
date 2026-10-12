@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { Brand, Prisma } from '@prisma/client';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,12 +6,14 @@ import { BusinessException } from '../common/exceptions/business.exception';
 import { PageQueryDto } from '../common/dto/query.dto';
 import { CreateBrandDto, StoreBrandQueryDto, UpdateBrandDto } from './dto/brand.dto';
 import { CategoryService } from './category.service';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class BrandService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly categoryService: CategoryService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
   async list(query: PageQueryDto, onlyEnabled = false) {
@@ -34,7 +36,12 @@ export class BrandService {
       this.prisma.brand.count({ where }),
     ]);
 
-    return { list, total, page, pageSize };
+    return {
+      list: list.map((b) => ({ ...b, logo: this.storage.toPublicUrl(b.logo) })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   /** 商城端品牌列表：只出启用品牌；传 categoryId 时只返回该分类（含后代）下有在售商品的品牌 */
@@ -64,14 +71,19 @@ export class BrandService {
       this.prisma.brand.count({ where }),
     ]);
 
-    return { list, total, page, pageSize };
+    return {
+      list: list.map((b) => ({ ...b, logo: this.storage.toPublicUrl(b.logo) })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async create(dto: CreateBrandDto) {
     return this.prisma.brand.create({
       data: {
         name: dto.name,
-        logo: dto.logo ?? null,
+        logo: this.storage.urlToKey(dto.logo) ?? null,
         sort: dto.sort ?? 0,
         status: dto.status ?? 1,
       },
@@ -83,7 +95,7 @@ export class BrandService {
     await this.ensureBrand(id);
     const data: Prisma.BrandUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
-    if (dto.logo !== undefined) data.logo = dto.logo;
+    if (dto.logo !== undefined) data.logo = this.storage.urlToKey(dto.logo) ?? null;
     if (dto.sort !== undefined) data.sort = dto.sort;
     if (dto.status !== undefined) data.status = dto.status;
     return this.prisma.brand.update({ where: { id }, data, select: { id: true } });

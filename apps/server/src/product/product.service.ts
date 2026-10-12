@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import {
   BatchUpdateSkuDto,
   CreateProductDto,
@@ -20,6 +21,7 @@ export class ProductService {
     private readonly prisma: PrismaService,
     private readonly categoryService: CategoryService,
     private readonly redisService: RedisService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
   async list(query: ListProductDto) {
@@ -53,7 +55,12 @@ export class ProductService {
       this.prisma.product.count({ where }),
     ]);
 
-    return { list, total, page, pageSize };
+    return {
+      list: list.map((p) => ({ ...p, mainImage: this.storage.toPublicUrl(p.mainImage) })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   /** 商城端商品列表：只出上架商品，附最低价（最便宜的在售 SKU 价，单位分） */
@@ -103,7 +110,7 @@ export class ProductService {
         id: p.id,
         name: p.name,
         subTitle: p.subTitle,
-        mainImage: p.mainImage,
+        mainImage: this.storage.toPublicUrl(p.mainImage),
         price: p.skus[0]?.price ?? null,
         originalPrice: p.skus[0]?.originalPrice ?? null,
         reviewCount: p.reviewCount,
@@ -136,12 +143,14 @@ export class ProductService {
           subTitle: dto.subTitle ?? null,
           categoryId: dto.categoryId,
           brandId: dto.brandId,
-          mainImage: dto.mainImage,
+          mainImage: this.storage.urlToKey(dto.mainImage)!,
           detail: dto.detail ?? null,
           status: dto.status ?? 1,
           sort: dto.sort ?? 0,
           images: dto.images?.length
-            ? { create: dto.images.map((url, i) => ({ url, sort: i })) }
+            ? {
+                create: dto.images.map((url, i) => ({ url: this.storage.urlToKey(url)!, sort: i })),
+              }
             : undefined,
         },
       });
@@ -198,7 +207,7 @@ export class ProductService {
     if (dto.subTitle !== undefined) data.subTitle = dto.subTitle;
     if (dto.categoryId !== undefined) data.category = { connect: { id: dto.categoryId } };
     if (dto.brandId !== undefined) data.brand = { connect: { id: dto.brandId } };
-    if (dto.mainImage !== undefined) data.mainImage = dto.mainImage;
+    if (dto.mainImage !== undefined) data.mainImage = this.storage.urlToKey(dto.mainImage)!;
     if (dto.detail !== undefined) data.detail = dto.detail;
     if (dto.status !== undefined) data.status = dto.status;
     if (dto.sort !== undefined) data.sort = dto.sort;
@@ -206,7 +215,7 @@ export class ProductService {
     if (dto.images !== undefined) {
       data.images = {
         deleteMany: {},
-        create: dto.images.map((url, i) => ({ url, sort: i })),
+        create: dto.images.map((url, i) => ({ url: this.storage.urlToKey(url)!, sort: i })),
       };
     }
 
@@ -231,7 +240,7 @@ export class ProductService {
     if (dto.originalPrice !== undefined) data.originalPrice = dto.originalPrice;
     if (dto.stock !== undefined) data.stock = dto.stock;
     if (dto.skuCode !== undefined) data.skuCode = dto.skuCode;
-    if (dto.image !== undefined) data.image = dto.image;
+    if (dto.image !== undefined) data.image = this.storage.urlToKey(dto.image)!;
     if (dto.status !== undefined) data.status = dto.status;
     const result = await this.prisma.productSku.update({
       where: { id: skuId },
@@ -263,7 +272,7 @@ export class ProductService {
         if (s.originalPrice !== undefined) data.originalPrice = s.originalPrice;
         if (s.stock !== undefined) data.stock = s.stock;
         if (s.skuCode !== undefined) data.skuCode = s.skuCode;
-        if (s.image !== undefined) data.image = s.image;
+        if (s.image !== undefined) data.image = this.storage.urlToKey(s.image)!;
         if (s.status !== undefined) data.status = s.status;
         return this.prisma.productSku.update({ where: { id: s.id }, data });
       }),
@@ -307,6 +316,8 @@ export class ProductService {
     const { ratingSum, ...productBase } = product;
     const detail = {
       ...productBase,
+      mainImage: this.storage.toPublicUrl(product.mainImage),
+      images: product.images.map((img) => ({ ...img, url: this.storage.toPublicUrl(img.url) })),
       ratingAvg: this.ratingAvg(product.reviewCount, product.ratingSum),
       skus: product.skus.map((sku) => ({
         id: sku.id,
@@ -314,7 +325,7 @@ export class ProductService {
         originalPrice: sku.originalPrice,
         stock: sku.stock,
         skuCode: sku.skuCode,
-        image: sku.image,
+        image: this.storage.toPublicUrl(sku.image),
         status: sku.status,
         // 规格组合扁平化：颜色=红、容量=128G
         specValues: sku.specValues.map((sv) => ({

@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { RedisService } from '../redis/redis.service';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { productDetailKey } from '../common/cache.constant';
 import { OrderStatus } from '../trade/order.constant';
 import { ReviewStatus } from './review.constant';
@@ -26,6 +27,7 @@ export class ReviewService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
   /** 提交评价：仅「已完成」订单的订单项可评；同一订单项只能评一次 */
@@ -54,7 +56,7 @@ export class ReviewService {
           productId: orderItem.productId,
           rating: dto.rating,
           content: dto.content?.trim() || null,
-          images: dto.images?.length ? dto.images : undefined,
+          images: dto.images?.length ? dto.images.map((u) => this.storage.urlToKey(u)!) : undefined,
           anonymous: dto.anonymous ?? false,
           status: ReviewStatus.VISIBLE,
         },
@@ -106,10 +108,10 @@ export class ReviewService {
         id: r.id,
         rating: r.rating,
         content: r.content,
-        images: (r.images as string[] | null) ?? [],
+        images: ((r.images as string[] | null) ?? []).map((u) => this.storage.toPublicUrl(u)),
         anonymous: r.anonymous,
         nickname: r.anonymous ? this.maskNickname(r.user.nickname) : r.user.nickname,
-        avatar: r.anonymous ? null : r.user.avatar,
+        avatar: r.anonymous ? null : this.storage.toPublicUrl(r.user.avatar),
         skuSpec: r.orderItem.skuSpec,
         mine: currentUserId != null && r.userId === currentUserId,
         replyContent: r.replyContent,
@@ -148,10 +150,10 @@ export class ReviewService {
         productId: r.productId,
         rating: r.rating,
         content: r.content,
-        images: (r.images as string[] | null) ?? [],
+        images: ((r.images as string[] | null) ?? []).map((u) => this.storage.toPublicUrl(u)),
         anonymous: r.anonymous,
         status: r.status,
-        product: r.product,
+        product: { ...r.product, mainImage: this.storage.toPublicUrl(r.product.mainImage) },
         skuSpec: r.orderItem.skuSpec,
         replyContent: r.replyContent,
         replyAt: r.replyAt,
@@ -189,7 +191,15 @@ export class ReviewService {
       }),
       this.prisma.productReview.count({ where }),
     ]);
-    return { list, total, page, pageSize };
+    return {
+      list: list.map((r) => ({
+        ...r,
+        product: { ...r.product, mainImage: this.storage.toPublicUrl(r.product.mainImage) },
+      })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   /** 屏蔽/恢复评价：原子切换状态 + 同步商品评分聚合（乐观锁） */

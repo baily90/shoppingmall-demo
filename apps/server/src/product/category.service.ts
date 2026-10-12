@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { Category, Prisma } from '@prisma/client';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 import { RedisService } from '../redis/redis.service';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import {
   CACHE_TTL_SECONDS,
   categoryTreeAllKey,
@@ -29,6 +30,7 @@ export class CategoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
   /** 分类树（未删除的；onlyEnabled 时只返回启用分类），带缓存 */
@@ -85,7 +87,7 @@ export class CategoryService {
         name: dto.name,
         parentId: dto.parentId ?? null,
         level,
-        icon: dto.icon ?? null,
+        icon: this.storage.urlToKey(dto.icon) ?? null,
         sort: dto.sort ?? 0,
         status: dto.status ?? 1,
       },
@@ -99,7 +101,7 @@ export class CategoryService {
     await this.ensureCategory(id);
     const data: Prisma.CategoryUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
-    if (dto.icon !== undefined) data.icon = dto.icon;
+    if (dto.icon !== undefined) data.icon = this.storage.urlToKey(dto.icon) ?? null;
     if (dto.sort !== undefined) data.sort = dto.sort;
     if (dto.status !== undefined) data.status = dto.status;
     const result = await this.prisma.category.update({ where: { id }, data, select: { id: true } });
@@ -149,7 +151,7 @@ export class CategoryService {
       level: c.level,
       sort: c.sort,
       status: c.status,
-      icon: c.icon,
+      icon: this.storage.toPublicUrl(c.icon) ?? null,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       children: [],

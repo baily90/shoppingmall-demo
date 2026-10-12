@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { RedisService } from '../redis/redis.service';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { CACHE_TTL_SECONDS, homeSlotsKey } from '../common/cache.constant';
 import { HomeSlotType } from './home.constant';
 import { CreateHomeSlotDto, ListHomeSlotDto, UpdateHomeSlotDto } from './dto/home.dto';
@@ -14,6 +15,7 @@ export class HomeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
   /** 商城端公开：返回启用的轮播图 + 金刚区（按 sort 升序），Cache Aside 缓存 */
@@ -34,7 +36,8 @@ export class HomeService {
       }),
     ]);
 
-    const result = { banners, navIcons };
+    const toPublic = (s: { image: string }) => ({ ...s, image: this.storage.toPublicUrl(s.image) });
+    const result = { banners: banners.map(toPublic), navIcons: navIcons.map(toPublic) };
     await this.redisService.setJSON(homeSlotsKey, result, CACHE_TTL_SECONDS);
     return result;
   }
@@ -57,7 +60,12 @@ export class HomeService {
       }),
       this.prisma.homeSlot.count({ where }),
     ]);
-    return { list, total, page, pageSize };
+    return {
+      list: list.map((s) => ({ ...s, image: this.storage.toPublicUrl(s.image) })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async create(dto: CreateHomeSlotDto) {
@@ -65,7 +73,7 @@ export class HomeService {
       data: {
         type: dto.type,
         name: dto.name,
-        image: dto.image,
+        image: this.storage.urlToKey(dto.image)!,
         linkType: dto.linkType ?? 0,
         linkValue: dto.linkValue ?? null,
         sort: dto.sort ?? 0,
@@ -80,7 +88,7 @@ export class HomeService {
     await this.ensure(id);
     const data: Prisma.HomeSlotUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
-    if (dto.image !== undefined) data.image = dto.image;
+    if (dto.image !== undefined) data.image = this.storage.urlToKey(dto.image)!;
     if (dto.linkType !== undefined) data.linkType = dto.linkType;
     if (dto.linkValue !== undefined) data.linkValue = dto.linkValue ?? null;
     if (dto.sort !== undefined) data.sort = dto.sort;

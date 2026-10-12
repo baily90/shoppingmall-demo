@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import type { Prisma } from '@prisma/client';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionService } from '../permission/permission.service';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { AssignRolesDto, CreateAdminDto, UpdateAdminDto } from './dto/admin.dto';
 import { AssignPermissionsDto, CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
@@ -15,6 +16,7 @@ export class SystemService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly permissionService: PermissionService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
   // ==================== 用户 ====================
@@ -52,7 +54,12 @@ export class SystemService {
       this.prisma.adminUser.count({ where }),
     ]);
 
-    return { list, total, page, pageSize };
+    return {
+      list: list.map((a) => ({ ...a, avatar: this.storage.toPublicUrl(a.avatar) })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async createAdmin(dto: CreateAdminDto) {
@@ -65,7 +72,7 @@ export class SystemService {
         username: dto.username,
         password,
         nickname: dto.nickname,
-        avatar: dto.avatar ?? null,
+        avatar: this.storage.urlToKey(dto.avatar) ?? null,
         status: dto.status ?? 1,
         roles: dto.roleIds?.length
           ? { create: dto.roleIds.map((roleId) => ({ roleId })) }
@@ -79,7 +86,7 @@ export class SystemService {
     await this.ensureAdmin(id);
     const data: Prisma.AdminUserUpdateInput = {};
     if (dto.nickname !== undefined) data.nickname = dto.nickname;
-    if (dto.avatar !== undefined) data.avatar = dto.avatar;
+    if (dto.avatar !== undefined) data.avatar = this.storage.urlToKey(dto.avatar) ?? null;
     if (dto.status !== undefined) data.status = dto.status;
     if (dto.password !== undefined) data.password = await bcrypt.hash(dto.password, 10);
     return this.prisma.adminUser.update({ where: { id }, data, select: { id: true } });

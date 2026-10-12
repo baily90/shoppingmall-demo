@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { PageQueryDto } from '../common/dto/query.dto';
+import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 
 /**
  * 商品收藏（按 SPU）：userId+productId 唯一，幂等增删。
@@ -11,7 +12,10 @@ import { PageQueryDto } from '../common/dto/query.dto';
  */
 @Injectable()
 export class FavoriteService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
+  ) {}
 
   /** 收藏（幂等 upsert） */
   async add(userId: number, productId: number) {
@@ -74,7 +78,7 @@ export class FavoriteService {
         product: {
           id: f.product.id,
           name: f.product.name,
-          mainImage: f.product.mainImage,
+          mainImage: this.storage.toPublicUrl(f.product.mainImage),
           status: f.product.status,
           deleted: !!f.product.deletedAt,
         },
