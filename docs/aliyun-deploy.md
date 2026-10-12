@@ -53,7 +53,9 @@ ECS 云服务器（Ubuntu）
 - [ ] **安全组**（最容易漏、最容易连不上的地方）开放入方向端口：
   - `22`（SSH）、`80`（http）、`443`（https）
   - `8080`（h5）、`8081`（admin）、`3000`（server，临时验证用）
+  - `9000`（**MinIO 图片公开访问，必须放行**——浏览器直接从这拉图）
   - 后面用 nginx 统一入口后可再收窄，练习期先放开。
+  - 注意：`9001`（MinIO 控制台）**不用开**，bucket 由 server 启动时自动创建（见第 4 节）。
 
 ### 1.3 域名 + ICP 备案（大陆必需，尽早启动）
 - [ ] 买一个域名（万网/阿里云域名，`.com` 约几十块/年）。
@@ -73,7 +75,7 @@ ECS 云服务器（Ubuntu）
 - [ ] 本地 `pnpm install`、三端 `build` 通过。
 - [ ] `pnpm --filter server migrate:deploy` 能应用迁移（本地验证）。
 - [ ] 存储改造已落地：DB 存图片 **key**，读取时 `toPublicUrl` 拼 `MINIO_PUBLIC_URL`（已做）。
-- [ ] **改造 `docker-compose.prod.yml`**：从 `build:` 改成 `pull` 固定 tag（CI 里构建，CD 只拉取）+ server 加 healthcheck（这一步见 7.3，会产出改好的文件）。
+- [x] **`docker-compose.prod.yml` 已改好**：`image:` pull 固定 tag（CI 构建、CD 只拉取）+ server 健康检查，无需再动。
 - [ ] `.gitignore` 确认：`.env`、`.env.prod`、`node_modules`、`dist` 都不进 git（只留 `.env.prod.example`）。
 
 ---
@@ -117,6 +119,23 @@ sudo usermod -aG docker deploy
 docker --version && docker compose version
 ```
 
+### 3.3.1 配置 Docker Hub 加速镜像（国内必做）
+> 国内直连 Docker Hub 很慢甚至拉不动，`postgres`/`redis` 都从这来，不配加速后面会卡在 `docker pull`。
+```bash
+# 阿里云控制台 → 容器镜像服务 ACR → 镜像加速器，能拿到你专属的 <id>.mirror.aliyuncs.com 地址，最稳
+# 没有的话先用公共镜像（DaoCloud 等），地址可能变，失效就换
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json > /dev/null <<'EOF'
+{
+  "registry-mirrors": [
+    "https://<你的阿里云加速ID>.mirror.aliyuncs.com"
+  ]
+}
+EOF
+sudo systemctl daemon-reload && sudo systemctl restart docker
+docker info | grep -A2 'Registry Mirrors'   # 确认生效
+```
+
 ### 3.4 建目录结构
 ```bash
 sudo mkdir -p /srv/mall && sudo chown -R deploy:deploy /srv/mall
@@ -142,9 +161,9 @@ docker login registry.cn-hangzhou.aliyuncs.com
 
 **建议**：练习期先用自托管跑通，之后要正式运营再切托管。切换只改环境变量（`DATABASE_URL`、`REDIS_HOST`、`MINIO_*`），代码不动——这正是这次存储改造的价值。
 
-**一个必须做的坑**：MinIO 首启**不会自动建 bucket**。首次启动后：
-- [ ] 打开 MinIO 控制台 `http://<IP>:9001`（安全组临时放行 9001），用 `MINIO_ROOT_USER/PASSWORD` 登录，手动创建 bucket `mall`（和 `.env.prod` 里 `MINIO_BUCKET=mall` 一致）。
-- [ ] 建完把 9001 端口从安全组关掉（控制台不用常开）。
+**bucket 不用手动建**：server 启动时（`MinioStorageService.onModuleInit`）会自动 `makeBucket` 并把 bucket 设为**公开读**（匿名 `s3:GetObject`，浏览器 `<img>` 才能直接拉图）。所以：
+- [x] 无需打开 MinIO 控制台、也无需手动建 bucket（9001 端口可一直不开）。
+- [ ] 唯一前提：server 起之前 db/redis/minio 已就绪——compose 的 `depends_on` 已保证，不用额外操作。
 
 ---
 
@@ -183,12 +202,13 @@ git push -u codeup master
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
-pnpm -r lint                 # 有 lint 就加，挂了直接停
 pnpm --filter @mall/shared build
+pnpm --filter server prisma:generate    # 关键：先产出 Prisma Client，server 编译要用
 pnpm --filter server build
 pnpm --filter h5 build
 pnpm --filter admin build
 ```
+> `prisma:generate` 必须在 `server build` **之前**，否则 Prisma Client 没生成、server 编译报错（Dockerfile 里也是这个顺序）。`pnpm -r lint` 可加在 install 后，当前项目 oxlint 只有 warning、不会挂构建。
 
 **阶段 3：镜像构建 + 推 ACR**
 - [ ] 加「镜像构建」任务（不用手写 docker 命令）：
@@ -219,21 +239,25 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
   - `ECS_HOST` / SSH 密钥（如果部署用 SSH）
 
 ### 7.3 生产文件（要在 ECS 上放对）
-- [ ] `docker-compose.prod.yml`：改成 `image: ${REGISTRY}/mall-xxx:${IMAGE_TAG}`（pull 版）+ server 加 healthcheck。
+- [x] `docker-compose.prod.yml`：已是 `image: ${REGISTRY}/mall-xxx:${IMAGE_TAG}`（pull 版）+ server 健康检查，无需再改。
 - [ ] `.env.prod`：从 `.env.prod.example` 复制，填真实值（见 8.1）。
-- [ ] 两个文件放到 ECS `/srv/mall/`。
+- [ ] 两个文件（`docker-compose.prod.yml` + `.env.prod`）放到 ECS `/srv/mall/`。
 
 ---
 
 ## 8. 首次部署上线
 
 ### 8.1 准备 .env.prod
-- [ ] 在 ECS `/srv/mall/.env.prod` 填真实值，关键字段：
+- [ ] 在 ECS `/srv/mall/` 执行 `cp .env.prod.example .env.prod`，改真实值。**`REGISTRY` 没有默认值、必须改成你的 ACR 地址，否则 compose 直接报 `variable REGISTRY not set`**：
 ```ini
+REGISTRY=registry.cn-hangzhou.aliyuncs.com/mall   # 改成你的 ACR 命名空间地址
+IMAGE_TAG=<git SHA 前7位>                        # 也可不写，部署时 export 覆盖（见 8.2）
 DATABASE_URL="postgresql://mall:mall123@db:5432/mall?schema=public"
 POSTGRES_USER=mall
 POSTGRES_PASSWORD=mall123          # 换成强密码
+POSTGRES_DB=mall
 REDIS_HOST=redis
+REDIS_PORT=6379
 MINIO_ENDPOINT=minio
 MINIO_PORT=9000
 MINIO_ACCESS_KEY=minioadmin
@@ -247,19 +271,14 @@ PORT=3000
 ```
 
 ### 8.2 首跑顺序
-- [ ] 先手动起数据层，让 db/redis/minio 先就绪（或让 compose 自己拉起）：
-```bash
-cd /srv/mall
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d db redis minio
-```
-- [ ] 进 MinIO 控制台建 bucket `mall`（见 4 的坑）。
 - [ ] 触发流水线（push 一次，或流水线手动「运行」），或手动首次拉取：
 ```bash
-export IMAGE_TAG=<git SHA>
+cd /srv/mall
+export IMAGE_TAG=<git SHA 前7位>
 docker compose --env-file .env.prod -f docker-compose.prod.yml pull
-docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 ```
+> `up -d` 会按依赖顺序自动完成：起 db/redis/minio → 跑 `migrate` 迁移 → 起 server（启动时自动建 MinIO bucket）→ 起 h5/admin。**不用手动建 bucket，也不用单独跑 migrate**。
 
 ### 8.3 验证
 - [ ] `docker compose ps` 所有服务 healthy/running。
@@ -276,6 +295,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 - [ ] 方案 A（简单）：再起一个 nginx 容器统一入口，80 跳 443，443 反代 h5(8080)/admin(8081)。
 - [ ] 方案 B：直接用 h5/admin 的 nginx 容器挂证书 + 配 443。
 - [ ] 改 `MINIO_PUBLIC_URL` 为域名（如 `https://static.你的域名.com`），图片地址自动切换，DB 不用动。
+  > ⚠️ 一旦页面走 HTTPS，图片也必须 HTTPS，否则浏览器拦「混合内容」。做法：给 MinIO 也配域名 + 证书（用 nginx 反代 `static.域名.com` → `minio:9000`）。练习期可先全程 HTTP，等备案下来再统一上 HTTPS。
 
 ---
 
@@ -289,15 +309,17 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 
 ### 10.3 日志
 ```bash
-docker compose -f docker-compose.prod.yml logs -f server   # 看后端日志
-docker compose -f docker-compose.prod.yml logs -f --tail=100 server
+cd /srv/mall
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f server   # 看后端日志
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f --tail=100 server
 ```
 
 ### 10.4 备份（自托管数据层必做）
 - [ ] 数据库定时备份：
 ```bash
 # 每天凌晨 2 点导出（可加 cron）
-docker compose -f docker-compose.prod.yml exec -T db pg_dump -U mall mall > /srv/backup/mall_$(date +%F).sql
+cd /srv/mall
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T db pg_dump -U mall mall > /srv/backup/mall_$(date +%F).sql
 ```
 - [ ] 迁移到托管 RDS 后，用 RDS 自动备份（更省心）。
 
@@ -318,10 +340,10 @@ docker compose -f docker-compose.prod.yml exec -T db pg_dump -U mall mall > /srv
 |---|---|
 | SSH 连不上 | 安全组没放 22；密钥权限不对（`chmod 400`） |
 | docker pull 卡 | ACR 地域和 ECS 不同；没 `docker login` |
-| server 起不来 | `docker logs` 看：DATABASE_URL 错 / 迁移没跑 / MinIO 连不上 |
-| 图片 404 | bucket `mall` 没建；`MINIO_PUBLIC_URL` 配错；9000 端口没放行 |
+| server 起不来 | `docker logs` 看：DATABASE_URL 错 / 迁移没跑 / Redis 连不上（DB、Redis 会阻塞引导，MinIO 不会） |
+| 图片 404 | `MINIO_PUBLIC_URL` 配错；9000 端口没放行（安全组） |
 | 前端页面能开但接口 404 | nginx `/api/` 反代没配；server 没起 |
-| 流水线构建失败 | 构建机没装 pnpm；`--frozen-lockfile` 与 lock 文件不一致 |
+| 流水线构建失败 | 构建机没装 pnpm；缺 `prisma:generate`（server 编译报 Prisma 错）；`--frozen-lockfile` 与 lock 不一致 |
 
 ---
 

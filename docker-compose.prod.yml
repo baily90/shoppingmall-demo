@@ -76,7 +76,8 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # 用 Chainguard 镜像（与本地 dev 一致）；官方 minio/minio 已从 Docker Hub 下架，且 UBI 版无 curl
+    image: cgr.dev/chainguard/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -85,9 +86,9 @@ services:
     volumes:
       - miniodata:/data
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      test: ['CMD', 'mc', 'ready', 'local']
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
 
 volumes:
