@@ -64,7 +64,7 @@ ECS 云服务器（Alibaba Cloud Linux 3/4）
 
 ### 1.4 开通 GitHub + ACR
 - [ ] GitHub：注册账号，新建一个**私有**仓库（代码仓；Actions 流水线也跑在 GitHub 上，个人项目免费额度够用）。
-- [ ] 容器镜像服务 ACR：开**个人版**（免费额度），地域选和 ECS 一致（本手册默认华东2上海 `registry.cn-shanghai.aliyuncs.com`，选了别的就把全文地域一起换）。
+- [ ] 容器镜像服务 ACR：开**个人版**（免费额度），地域选和 ECS 一致。个人版有一个**专属地址**（形如 `crpi-xxx.cn-shanghai.personal.cr.aliyuncs.com`），在 ACR 控制台实例页能看到，下面所有 `docker login` / `REGISTRY` 都用它。
 
 ---
 
@@ -137,7 +137,7 @@ mkdir -p /srv/mall
 
 ### 3.5 登录 ACR（让 ECS 能拉私有镜像）
 ```bash
-docker login registry.cn-shanghai.aliyuncs.com
+docker login crpi-csvbaxkcha7nlevp.cn-shanghai.personal.cr.aliyuncs.com
 # 用户名=你的阿里云账号登录名；密码=ACR 控制台「访问凭证」里设置的固定密码（见第 6 节）
 ```
 
@@ -207,7 +207,13 @@ git push -u origin main
 ### 7.3 生产文件（要在 ECS 上放对）
 - [x] `docker-compose.prod.yml`：已是 `image: ${REGISTRY}/mall-xxx:${IMAGE_TAG}`（pull 版）+ server 健康检查，无需再改。
 - [ ] `.env.prod`：从 `.env.prod.example` 复制，填真实值（见 8.1）。
-- [ ] 两个文件（`docker-compose.prod.yml` + `.env.prod`）放到 ECS `/srv/mall/`。
+- [ ] 两个文件放到 ECS `/srv/mall/`。**怎么传**（二选一）：
+  - 本地 `scp`（在你自己 Mac 终端跑，不是 ECS 上）：
+    ```bash
+    cd /Users/zhangyanlong/Workspace/baily/mall
+    scp docker-compose.prod.yml .env.prod.example root@<公网IP>:/srv/mall/   # 密钥登录加 -i 你的.pem
+    ```
+  - 或用 ECS 控制台 Workbench 网页终端的「上传文件」按钮，上传到 `/srv/mall/`。
 
 ---
 
@@ -216,7 +222,7 @@ git push -u origin main
 ### 8.1 准备 .env.prod
 - [ ] 在 ECS `/srv/mall/` 执行 `cp .env.prod.example .env.prod`，改真实值。**`REGISTRY` 没有默认值、必须改成你的 ACR 地址，否则 compose 直接报 `variable REGISTRY not set`**：
 ```ini
-REGISTRY=registry.cn-shanghai.aliyuncs.com/mall   # 改成你的 ACR 命名空间地址
+REGISTRY=crpi-csvbaxkcha7nlevp.cn-shanghai.personal.cr.aliyuncs.com/mall   # 你的 ACR 个人版地址 + 命名空间
 IMAGE_TAG=<git SHA>                              # 也可不写，部署时 export 覆盖（见 8.2）
 DATABASE_URL="postgresql://mall:mall123@db:5432/mall?schema=public"
 POSTGRES_USER=mall

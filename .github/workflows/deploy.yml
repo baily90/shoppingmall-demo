@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 env:
-  # ACR 地址（含命名空间）。地域换成你实际的：杭州=cn-hangzhou，上海=cn-shanghai
-  REGISTRY: registry.cn-shanghai.aliyuncs.com/mall
+  # ACR 个人版专属地址（含命名空间），在 ACR 控制台实例页可查
+  REGISTRY: crpi-csvbaxkcha7nlevp.cn-shanghai.personal.cr.aliyuncs.com/mall
   # 镜像 tag 用本次提交的 git SHA（全量），构建和部署保持一致即可
   IMAGE_TAG: ${{ github.sha }}
 
@@ -22,7 +22,7 @@ jobs:
       - name: 登录 ACR
         uses: docker/login-action@v3
         with:
-          registry: registry.cn-shanghai.aliyuncs.com
+          registry: crpi-csvbaxkcha7nlevp.cn-shanghai.personal.cr.aliyuncs.com
           username: ${{ secrets.ACR_USER }}
           password: ${{ secrets.ACR_PASS }}
 
