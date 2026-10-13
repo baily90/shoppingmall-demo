@@ -18,7 +18,7 @@ Codeup 代码仓库 ──► 云效 Flow 流水线（国内构建机）
                         └─ push 到 ACR（mall-server / mall-h5 / mall-admin）
    │
    ▼
-ECS 云服务器（Ubuntu）
+ECS 云服务器（Alibaba Cloud Linux 3）
    ├─ nginx（h5/admin 容器内，反代 /api → server:3000）
    ├─ server 容器（NestJS :3000）
    ├─ db 容器（PostgreSQL 16）
@@ -44,7 +44,7 @@ ECS 云服务器（Ubuntu）
 | 地域 | 杭州 / 上海（离你近） | 地域决定 ACR、RDS 都要同地域才能内网互通 |
 | 实例规格 | **2 vCPU 4 GiB** 起步，预算够上 4c8g | 你要同时跑 server + db + redis + minio + 2 个 nginx，2c4g 是底线，4c8g 更舒服 |
 | 实例类型 | 突发性能型（t6/t7）练习够 | 便宜，适合低负载；别买「共享型」老实例 |
-| 镜像 | **Ubuntu 22.04 LTS** | 社区资料最多，和本手册命令一致 |
+| 镜像 | **Alibaba Cloud Linux 3** | 阿里云原生优化、自带国内源，和本手册命令一致 |
 | 系统盘 | 云盘 ESSD 40G 起步 | 图片会进 MinIO，40G 练习够；不够以后扩容 |
 | 带宽 | 固定带宽 **3~5 Mbps** | 固定带宽计费简单；按量适合流量不稳定 |
 | 登录凭证 | **密钥对**（生成并保存好 .pem） | 比密码安全，也是最佳实践 |
@@ -86,33 +86,27 @@ ECS 云服务器（Ubuntu）
 - [ ] 用 Workbench（控制台网页）或本地 `ssh -i your-key.pem root@<公网IP>` 登录。
 
 ### 3.2 基础配置
+> 练习期直接用 root 操作（第 3.1 步就是 root 登录），省去建普通用户这一步；以后要正式上线再补一个非 root 用户 + `wheel` 组。
 ```bash
-# 建一个非 root 用户（生产不直接用 root）
-adduser deploy
-usermod -aG sudo deploy     # 加入 sudo 组
-# 之后用 deploy 用户登录，需要 root 时 sudo
-
 # 时区（国内）
-sudo timedatectl set-timezone Asia/Shanghai
+timedatectl set-timezone Asia/Shanghai
 
-# 更新系统
-sudo apt update && sudo apt upgrade -y
+# 更新系统（Alinux 用 dnf）
+dnf update -y
 ```
 
 ### 3.3 安装 Docker + Docker Compose（用阿里云软件源，国内快）
 ```bash
-sudo apt install -y ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://mirrors.aliyun.com/docker-ce/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-sudo systemctl enable --now docker
+dnf install -y dnf-plugins-core ca-certificates curl
+dnf config-manager --add-repo https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
 
-# 让 deploy 用户免 sudo 用 docker（重登后生效）
-sudo usermod -aG docker deploy
+# 关键：Alinux 的 $releasever 是 3/4，而 docker-ce 源只有 CentOS 7/8/9，不固定会 404。
+# 先 cat /etc/redhat-release 看版本：Alinux 3 → 固定 8；Alinux 4 → 固定 9
+sed -i 's|\$releasever|9|g' /etc/yum.repos.d/docker-ce.repo
+dnf clean all
+
+dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+systemctl enable --now docker
 ```
 验证：
 ```bash
@@ -124,27 +118,27 @@ docker --version && docker compose version
 ```bash
 # 阿里云控制台 → 容器镜像服务 ACR → 镜像加速器，能拿到你专属的 <id>.mirror.aliyuncs.com 地址，最稳
 # 没有的话先用公共镜像（DaoCloud 等），地址可能变，失效就换
-sudo mkdir -p /etc/docker
-sudo tee /etc/docker/daemon.json > /dev/null <<'EOF'
+mkdir -p /etc/docker
+tee /etc/docker/daemon.json > /dev/null <<'EOF'
 {
   "registry-mirrors": [
     "https://<你的阿里云加速ID>.mirror.aliyuncs.com"
   ]
 }
 EOF
-sudo systemctl daemon-reload && sudo systemctl restart docker
+systemctl daemon-reload && systemctl restart docker
 docker info | grep -A2 'Registry Mirrors'   # 确认生效
 ```
 
 ### 3.4 建目录结构
 ```bash
-sudo mkdir -p /srv/mall && sudo chown -R deploy:deploy /srv/mall
+mkdir -p /srv/mall
 ```
 
 ### 3.5 登录 ACR（让 ECS 能拉私有镜像）
 ```bash
 docker login registry.cn-hangzhou.aliyuncs.com
-# 输入 ACR 固定密码的用户名/密码（6.2 会配）
+# 用户名=你的阿里云账号登录名；密码=ACR 控制台「访问凭证」里设置的固定密码（见第 6 节）
 ```
 
 ---
