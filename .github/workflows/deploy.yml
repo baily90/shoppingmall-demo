@@ -1,10 +1,10 @@
 # GitHub Actions 构建 + 部署到阿里云 ECS
-# 触发：push 到 master → 构建 3 个镜像并推 ACR → SSH 到 ECS 拉取并 up
+# 触发：push 到 main → 构建 3 个镜像并推 ACR → SSH 到 ECS 拉取并 up
 name: build-and-deploy
 
 on:
   push:
-    branches: [master]
+    branches: [main]
 
 env:
   # ACR 地址（含命名空间）。地域换成你实际的：杭州=cn-hangzhou，上海=cn-shanghai

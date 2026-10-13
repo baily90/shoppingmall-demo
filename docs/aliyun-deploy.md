@@ -168,7 +168,7 @@ docker login registry.cn-shanghai.aliyuncs.com
 ```bash
 cd /Users/zhangyanlong/Workspace/baily/mall
 git remote add origin git@github.com:<你的用户名>/mall.git   # 或 https://github.com/<用户名>/mall.git
-git push -u origin master
+git push -u origin main
 ```
 > 首次用 SSH 先把公钥加到 GitHub：`Settings → SSH and GPG keys → New SSH key`，贴入 `~/.ssh/id_rsa.pub` 的整行内容。验证：`ssh -T git@github.com` 应返回 `Hi <用户名>!`。
 - [ ] 确认 `.env`、`.env.prod` **没有**被推上去（`git ls-files | grep -E '\.env'` 只应看到 `.env.example` 系列）。
@@ -188,7 +188,7 @@ git push -u origin master
 > 流水线就是一个 yaml 文件：`.github/workflows/deploy.yml`（仓库里已放好，push 到 GitHub 后自动生效）。它做四件事：检出代码 → 登录 ACR → docker build 三个镜像并 push → SSH 到 ECS 拉取并 up。
 
 ### 7.1 了解 workflow（已写好，不用手写）
-`.github/workflows/deploy.yml` 流程：`push 到 master 触发` → `docker build -f apps/xxx/Dockerfile` 打 3 个镜像（Dockerfile 里自带 corepack + pnpm install + build，所以不用单独跑构建）→ `push 到 ACR` → `SSH 到 ECS 执行 compose pull + up`。
+`.github/workflows/deploy.yml` 流程：`push 到 main 触发` → `docker build -f apps/xxx/Dockerfile` 打 3 个镜像（Dockerfile 里自带 corepack + pnpm install + build，所以不用单独跑构建）→ `push 到 ACR` → `SSH 到 ECS 执行 compose pull + up`。
 
 > ⚠️ 海外构建机拉 Docker Hub 基础镜像（node:24-alpine、nginx）没问题，但推镜像到国内 ACR 会慢一点，属正常，能跑通。
 
@@ -268,7 +268,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 ## 10. 日常运维（上线后）
 
 ### 10.1 日常发布
-- [ ] 改代码 → push 到 master → GitHub Actions 自动构建部署 → 完成。这就是以后每次发版的流程。
+- [ ] 改代码 → push 到 main → GitHub Actions 自动构建部署 → 完成。这就是以后每次发版的流程。
 
 ### 10.2 回滚
 - [ ] GitHub Actions 历史里找到上一个成功版本，重跑（或手动改 `IMAGE_TAG` 重新 up）。
