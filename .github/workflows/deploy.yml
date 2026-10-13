@@ -1,0 +1,58 @@
+# GitHub Actions 构建 + 部署到阿里云 ECS
+# 触发：push 到 master → 构建 3 个镜像并推 ACR → SSH 到 ECS 拉取并 up
+name: build-and-deploy
+
+on:
+  push:
+    branches: [master]
+
+env:
+  # ACR 地址（含命名空间）。地域换成你实际的：杭州=cn-hangzhou，上海=cn-shanghai
+  REGISTRY: registry.cn-hangzhou.aliyuncs.com/mall
+  # 镜像 tag 用本次提交的 git SHA（全量），构建和部署保持一致即可
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 登录 ACR
+        uses: docker/login-action@v3
+        with:
+          registry: registry.cn-hangzhou.aliyuncs.com
+          username: ${{ secrets.ACR_USER }}
+          password: ${{ secrets.ACR_PASS }}
+
+      # Dockerfile 自带 corepack + pnpm install + build，所以这里直接 docker build 即可
+      - name: 构建并推送 server
+        run: |
+          docker build -f apps/server/Dockerfile -t ${{ env.REGISTRY }}/mall-server:${{ env.IMAGE_TAG }} .
+          docker push ${{ env.REGISTRY }}/mall-server:${{ env.IMAGE_TAG }}
+
+      - name: 构建并推送 h5
+        run: |
+          docker build -f apps/h5/Dockerfile -t ${{ env.REGISTRY }}/mall-h5:${{ env.IMAGE_TAG }} .
+          docker push ${{ env.REGISTRY }}/mall-h5:${{ env.IMAGE_TAG }}
+
+      - name: 构建并推送 admin
+        run: |
+          docker build -f apps/admin/Dockerfile -t ${{ env.REGISTRY }}/mall-admin:${{ env.IMAGE_TAG }} .
+          docker push ${{ env.REGISTRY }}/mall-admin:${{ env.IMAGE_TAG }}
+
+      - name: 部署到 ECS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: root
+          key: ${{ secrets.ECS_SSH_KEY }}
+          # 如果本地没有 .pem 私钥、想用密码登录，把上面 key 一行删掉，换成下面这行，
+          # 并在 GitHub 里新增 ECS_PASSWORD 这个 secret：
+          # password: ${{ secrets.ECS_PASSWORD }}
+          script: |
+            cd /srv/mall
+            export IMAGE_TAG=${{ env.IMAGE_TAG }}
+            docker compose --env-file .env.prod -f docker-compose.prod.yml pull
+            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d

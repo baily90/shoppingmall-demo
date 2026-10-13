@@ -1,6 +1,6 @@
-# 阿里云部署手册（云效 CI/CD 全流程）
+# 阿里云部署手册（GitHub Actions CI/CD 全流程）
 
-> 目标：把这个 pnpm monorepo（NestJS server + React h5/admin + @mall/shared）通过**云效（Codeup + Flow）+ ACR + ECS** 从零部署上线。
+> 目标：把这个 pnpm monorepo（NestJS server + React h5/admin + @mall/shared）通过 **GitHub Actions + ACR + ECS** 从零部署上线。
 > 读者定位：对服务器不熟、第一次上线的人。每一步都给出**为什么**和**具体命令/点击路径**。
 > 价格会随活动变化，文中数字只是量级参考，以控制台实时价为准。
 
@@ -12,9 +12,9 @@
 你本地 push 代码
    │
    ▼
-Codeup 代码仓库 ──► 云效 Flow 流水线（国内构建机）
-                        ├─ 构建：pnpm install + build
-                        ├─ 打镜像：docker build（tag=git SHA）
+GitHub 代码仓库 ──► GitHub Actions（海外构建机）
+                        ├─ 构建：docker build（Dockerfile 内 pnpm install + build）
+                        ├─ 打镜像：3 个镜像，tag = git SHA
                         └─ push 到 ACR（mall-server / mall-h5 / mall-admin）
    │
    ▼
@@ -26,7 +26,7 @@ ECS 云服务器（Alibaba Cloud Linux 3）
    └─ minio 容器（对象存储，存图片）
 ```
 
-**用到的阿里云产品**：ECS（服务器）、Codeup（代码仓）、Flow（流水线）、ACR（镜像仓）、（可选）RDS/Redis/OSS（托管数据层）、域名 + ICP 备案。
+**用到的产品**：ECS + ACR（阿里云）、GitHub（代码仓 + Actions 流水线）、（可选）RDS/Redis/OSS（托管数据层）、域名 + ICP 备案。
 
 ---
 
@@ -62,9 +62,9 @@ ECS 云服务器（Alibaba Cloud Linux 3）
 - [ ] 提交 **ICP 备案**：ECS 是大陆节点，域名走 80/443 必须备案，**周期 2~4 周**，先提交着，别等最后。
 - [ ] 备案期间：**先用 `IP:端口` 直接访问验证整条链路**，不用域名也能跑通。
 
-### 1.4 开通云效 + ACR
-- [ ] 云效 DevOps（yunxiao.aliyun.com）：个人版免费，开通即可，含 Codeup + Flow。
-- [ ] 容器镜像服务 ACR：开**个人版**（免费额度），地域选和 ECS 一致。
+### 1.4 开通 GitHub + ACR
+- [ ] GitHub：注册账号，新建一个**私有**仓库（代码仓；Actions 流水线也跑在 GitHub 上，个人项目免费额度够用）。
+- [ ] 容器镜像服务 ACR：开**个人版**（免费额度），地域选和 ECS 一致（本手册默认杭州 `registry.cn-hangzhou.aliyuncs.com`，选了别的就把全文地域一起换）。
 
 ---
 
@@ -161,15 +161,16 @@ docker login registry.cn-hangzhou.aliyuncs.com
 
 ---
 
-## 5. Codeup 建仓 + push 代码
+## 5. GitHub 建仓 + push 代码
 
-- [ ] 云效 → 代码管理 Codeup → 新建仓库（私有）。
-- [ ] 本地把仓库指过去并推送：
+- [ ] GitHub → New repository → 建**私有**仓库（名字随意，如 `mall`），不要勾选初始化 README（保持空库，方便 push 现有仓库）。
+- [ ] 本地把仓库指过去并推送（推荐 SSH，GitHub 的 SSH 用户名是标准的 `git`，没有云效那些幺蛾子）：
 ```bash
 cd /Users/zhangyanlong/Workspace/baily/mall
-git remote add codeup <Codeup 仓库地址>   # 或直接改 origin
-git push -u codeup master
+git remote add origin git@github.com:<你的用户名>/mall.git   # 或 https://github.com/<用户名>/mall.git
+git push -u origin master
 ```
+> 首次用 SSH 先把公钥加到 GitHub：`Settings → SSH and GPG keys → New SSH key`，贴入 `~/.ssh/id_rsa.pub` 的整行内容。验证：`ssh -T git@github.com` 应返回 `Hi <用户名>!`。
 - [ ] 确认 `.env`、`.env.prod` **没有**被推上去（`git ls-files | grep -E '\.env'` 只应看到 `.env.example` 系列）。
 
 ---
@@ -182,55 +183,26 @@ git push -u codeup master
 
 ---
 
-## 7. 云效 Flow 建流水线
+## 7. GitHub Actions 建流水线（workflow 文件）
 
-### 7.1 创建流水线（四个阶段）
-云效 → 流水线 Flow → 新建流水线：
+> 云效 Flow 那套「图形化四阶段」这里换成**一个 yaml 文件**：`.github/workflows/deploy.yml`（仓库里已放好，push 到 GitHub 后自动生效）。它做四件事：检出代码 → 登录 ACR → docker build 三个镜像并 push → SSH 到 ECS 拉取并 up。
 
-**阶段 1：代码源**
-- [ ] 选 Codeup 仓库，触发方式 = push 到 master/main 分支。
+### 7.1 了解 workflow（已写好，不用手写）
+`.github/workflows/deploy.yml` 流程：`push 到 master 触发` → `docker build -f apps/xxx/Dockerfile` 打 3 个镜像（Dockerfile 里自带 corepack + pnpm install + build，所以不用单独跑构建）→ `push 到 ACR` → `SSH 到 ECS 执行 compose pull + up`。
 
-**阶段 2：构建（云效托管构建机）**
-- [ ] 构建机选「云效公共构建环境」（国内）。
-- [ ] 加「执行命令」步骤，命令大致：
-```bash
-corepack enable
-pnpm install --frozen-lockfile
-pnpm --filter @mall/shared build
-pnpm --filter server prisma:generate    # 关键：先产出 Prisma Client，server 编译要用
-pnpm --filter server build
-pnpm --filter h5 build
-pnpm --filter admin build
-```
-> `prisma:generate` 必须在 `server build` **之前**，否则 Prisma Client 没生成、server 编译报错（Dockerfile 里也是这个顺序）。`pnpm -r lint` 可加在 install 后，当前项目 oxlint 只有 warning、不会挂构建。
+> ⚠️ 海外构建机拉 Docker Hub 基础镜像（node:24-alpine、nginx）没问题，但推镜像到国内 ACR 会慢一点，属正常，能跑通。
 
-**阶段 3：镜像构建 + 推 ACR**
-- [ ] 加「镜像构建」任务（不用手写 docker 命令）：
-  - 关联 ACR 实例 + 仓库 `mall-server`，镜像 tag 用内置变量 `${CI_COMMIT_SHA:0:7}`（git SHA 前 7 位，别用 latest）。
-  - 同样再建 2 个：`mall-h5`、`mall-admin`（分别指定各自的 Dockerfile）。
-- [ ] 或者在「执行命令」里手写：
-```bash
-TAG=${CI_COMMIT_SHA:0:7}
-docker build -f apps/server/Dockerfile -t registry.cn-hangzhou.aliyuncs.com/mall/mall-server:$TAG .
-docker push registry.cn-hangzhou.aliyuncs.com/mall/mall-server:$TAG
-```
+### 7.2 在 GitHub 里加 4 个 Secrets（敏感信息不进代码）
+- [ ] GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**，逐个添加：
+  - `ACR_USER`：阿里云账号登录名（ACR「访问凭证」页显示的克隆账号）
+  - `ACR_PASS`：ACR 固定密码
+  - `ECS_HOST`：ECS 公网 IP
+  - `ECS_SSH_KEY`：登录 ECS 的**私钥内容**（`.pem` 文件整段贴进去）
+  > JWT/数据库密码那些**不用**放这里——它们已经在 ECS 的 `.env.prod` 里，构建不依赖。
 
-**阶段 4：部署到 ECS**
-- [ ] 加「ECS 部署」任务（云效内置，选你的 ECS 主机），或「执行命令」SSH 执行：
-```bash
-cd /srv/mall
-export IMAGE_TAG=${CI_COMMIT_SHA:0:7}
-docker compose --env-file .env.prod -f docker-compose.prod.yml pull
-docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
-```
-
-### 7.2 配置变量/密钥（敏感信息不进命令）
-- [ ] 流水线 → 变量与缓存 → 添加**密钥**（流水线里用 `${密钥名}` 引用）：
-  - `ACR_USER`、`ACR_PASS`（ACR 固定密码）
-  - `JWT_ACCESS_SECRET`、`JWT_REFRESH_SECRET`（强随机值）
-  - `POSTGRES_PASSWORD`、`MINIO_SECRET_KEY`
-  - `ECS_HOST` / SSH 密钥（如果部署用 SSH）
+### 7.2.1（可选）用密码登录 ECS 而不是私钥
+- [ ] 若本地没有 `.pem` 私钥：ECS 控制台 → 实例 → 更多 → 密码/密钥 → **重置实例密码**，设一个 root 密码。
+- [ ] 然后把 `.github/workflows/deploy.yml` 部署那步的 `key: ${{ secrets.ECS_SSH_KEY }}` 换成 `password: ${{ secrets.ECS_PASSWORD }}`，并在 GitHub 里新增 `ECS_PASSWORD` secret。
 
 ### 7.3 生产文件（要在 ECS 上放对）
 - [x] `docker-compose.prod.yml`：已是 `image: ${REGISTRY}/mall-xxx:${IMAGE_TAG}`（pull 版）+ server 健康检查，无需再改。
@@ -245,7 +217,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 - [ ] 在 ECS `/srv/mall/` 执行 `cp .env.prod.example .env.prod`，改真实值。**`REGISTRY` 没有默认值、必须改成你的 ACR 地址，否则 compose 直接报 `variable REGISTRY not set`**：
 ```ini
 REGISTRY=registry.cn-hangzhou.aliyuncs.com/mall   # 改成你的 ACR 命名空间地址
-IMAGE_TAG=<git SHA 前7位>                        # 也可不写，部署时 export 覆盖（见 8.2）
+IMAGE_TAG=<git SHA>                              # 也可不写，部署时 export 覆盖（见 8.2）
 DATABASE_URL="postgresql://mall:mall123@db:5432/mall?schema=public"
 POSTGRES_USER=mall
 POSTGRES_PASSWORD=mall123          # 换成强密码
@@ -265,10 +237,10 @@ PORT=3000
 ```
 
 ### 8.2 首跑顺序
-- [ ] 触发流水线（push 一次，或流水线手动「运行」），或手动首次拉取：
+- [ ] push 代码到 GitHub 触发 Actions 自动部署，或手动首次拉取：
 ```bash
 cd /srv/mall
-export IMAGE_TAG=<git SHA 前7位>
+export IMAGE_TAG=<git SHA>
 docker compose --env-file .env.prod -f docker-compose.prod.yml pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 ```
@@ -296,10 +268,10 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 ## 10. 日常运维（上线后）
 
 ### 10.1 日常发布
-- [ ] 改代码 → push 到 master → 云效自动跑流水线 → 部署完成。这就是以后每次发版的流程。
+- [ ] 改代码 → push 到 master → GitHub Actions 自动构建部署 → 完成。这就是以后每次发版的流程。
 
 ### 10.2 回滚
-- [ ] 云效流水线历史里找到上一个成功版本，重跑（或手动改 `IMAGE_TAG` 重新 up）。
+- [ ] GitHub Actions 历史里找到上一个成功版本，重跑（或手动改 `IMAGE_TAG` 重新 up）。
 
 ### 10.3 日志
 ```bash
@@ -337,7 +309,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T db pg_dum
 | server 起不来 | `docker logs` 看：DATABASE_URL 错 / 迁移没跑 / Redis 连不上（DB、Redis 会阻塞引导，MinIO 不会） |
 | 图片 404 | `MINIO_PUBLIC_URL` 配错；9000 端口没放行（安全组） |
 | 前端页面能开但接口 404 | nginx `/api/` 反代没配；server 没起 |
-| 流水线构建失败 | 构建机没装 pnpm；缺 `prisma:generate`（server 编译报 Prisma 错）；`--frozen-lockfile` 与 lock 不一致 |
+| Actions 构建失败 | 看 Actions 日志：ACR 登录失败（secret 配错）/ docker build 报 pnpm 或 Prisma 错 / `--frozen-lockfile` 与 lock 不一致 |
 
 ---
 
