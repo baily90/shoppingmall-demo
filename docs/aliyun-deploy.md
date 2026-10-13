@@ -114,15 +114,16 @@ docker --version && docker compose version
 ```
 
 ### 3.3.1 配置 Docker Hub 加速镜像（国内必做）
-> 国内直连 Docker Hub 很慢甚至拉不动，`postgres`/`redis` 都从这来，不配加速后面会卡在 `docker pull`。
+> 国内直连 Docker Hub 拉不动，`postgres`/`redis` 都从这来，不配加速会卡在 `docker pull`。
+> ⚠️ 阿里云个人版「镜像加速器」的 `<id>.mirror.aliyuncs.com` 地址近年已失效（返回 `not found`），别再用了。下面这几个是 2026 年实测可用的公益源，配 2~3 个做冗余，失效就换。
 ```bash
-# 阿里云控制台 → 容器镜像服务 ACR → 镜像加速器，能拿到你专属的 <id>.mirror.aliyuncs.com 地址，最稳
-# 没有的话先用公共镜像（DaoCloud 等），地址可能变，失效就换
 mkdir -p /etc/docker
 tee /etc/docker/daemon.json > /dev/null <<'EOF'
 {
   "registry-mirrors": [
-    "https://<你的阿里云加速ID>.mirror.aliyuncs.com"
+    "https://docker.xuanyuan.me",
+    "https://docker.1ms.run",
+    "https://docker.m.daocloud.io"
   ]
 }
 EOF
@@ -251,6 +252,14 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 ```
 > `up -d` 会按依赖顺序自动完成：起 db/redis/minio → 跑 `migrate` 迁移 → 起 server（启动时自动建 MinIO bucket）→ 起 h5/admin。**不用手动建 bucket，也不用单独跑 migrate**。
+
+### 8.2.1 初始化管理员账号（首次必做）
+> `migrate deploy` 只建表、**不灌账号**。admin/operator 账号在 seed 脚本里，需手动跑一次：
+```bash
+cd /srv/mall
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec server sh -c "cd apps/server && npx prisma db seed"
+```
+> 跑完可用 `admin / admin123`（超管）、`operator / operator123`（运营）登录。seed 幂等，可重复跑。
 
 ### 8.3 验证
 - [ ] `docker compose ps` 所有服务 healthy/running。
