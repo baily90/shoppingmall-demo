@@ -1,6 +1,6 @@
 # 生产编排（自托管基线：PostgreSQL + Redis + MinIO + 三端应用）
 # 镜像由 CI（GitHub Actions）构建后 push 到 ACR，这里只 pull、不 build。
-# 运行：export IMAGE_TAG=<gitSHA前7位> && docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+# 运行：export IMAGE_TAG=<gitSHA> && docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 # 上云可整体替换成 RDS / 云 Redis(Tair) / OSS（存储层 S3 兼容，换 OSS 只改 MINIO_* + 换一个 StorageService 实现）
 services:
   # 一次性迁移：应用前先跑 prisma migrate deploy，保证 server 启动时 schema 已就绪

@@ -18,7 +18,7 @@ GitHub 代码仓库 ──► GitHub Actions（海外构建机）
                         └─ push 到 ACR（mall-server / mall-h5 / mall-admin）
    │
    ▼
-ECS 云服务器（Alibaba Cloud Linux 3）
+ECS 云服务器（Alibaba Cloud Linux 3/4）
    ├─ nginx（h5/admin 容器内，反代 /api → server:3000）
    ├─ server 容器（NestJS :3000）
    ├─ db 容器（PostgreSQL 16）
@@ -44,7 +44,7 @@ ECS 云服务器（Alibaba Cloud Linux 3）
 | 地域 | 杭州 / 上海（离你近） | 地域决定 ACR、RDS 都要同地域才能内网互通 |
 | 实例规格 | **2 vCPU 4 GiB** 起步，预算够上 4c8g | 你要同时跑 server + db + redis + minio + 2 个 nginx，2c4g 是底线，4c8g 更舒服 |
 | 实例类型 | 突发性能型（t6/t7）练习够 | 便宜，适合低负载；别买「共享型」老实例 |
-| 镜像 | **Alibaba Cloud Linux 3** | 阿里云原生优化、自带国内源，和本手册命令一致 |
+| 镜像 | **Alibaba Cloud Linux 3（或 4）** | 阿里云原生优化、自带国内源；3/4 只在装 Docker 固定源版本时不同（见 3.3） |
 | 系统盘 | 云盘 ESSD 40G 起步 | 图片会进 MinIO，40G 练习够；不够以后扩容 |
 | 带宽 | 固定带宽 **3~5 Mbps** | 固定带宽计费简单；按量适合流量不稳定 |
 | 登录凭证 | **密钥对**（生成并保存好 .pem） | 比密码安全，也是最佳实践 |
@@ -64,7 +64,7 @@ ECS 云服务器（Alibaba Cloud Linux 3）
 
 ### 1.4 开通 GitHub + ACR
 - [ ] GitHub：注册账号，新建一个**私有**仓库（代码仓；Actions 流水线也跑在 GitHub 上，个人项目免费额度够用）。
-- [ ] 容器镜像服务 ACR：开**个人版**（免费额度），地域选和 ECS 一致（本手册默认杭州 `registry.cn-hangzhou.aliyuncs.com`，选了别的就把全文地域一起换）。
+- [ ] 容器镜像服务 ACR：开**个人版**（免费额度），地域选和 ECS 一致（本手册默认华东2上海 `registry.cn-shanghai.aliyuncs.com`，选了别的就把全文地域一起换）。
 
 ---
 
@@ -101,8 +101,8 @@ dnf install -y dnf-plugins-core ca-certificates curl
 dnf config-manager --add-repo https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
 
 # 关键：Alinux 的 $releasever 是 3/4，而 docker-ce 源只有 CentOS 7/8/9，不固定会 404。
-# 先 cat /etc/redhat-release 看版本：Alinux 3 → 固定 8；Alinux 4 → 固定 9
-sed -i 's|\$releasever|9|g' /etc/yum.repos.d/docker-ce.repo
+# 先 cat /etc/redhat-release 看版本：Alinux 3 → 下面固定 8；Alinux 4 → 把 8 改成 9
+sed -i 's|\$releasever|8|g' /etc/yum.repos.d/docker-ce.repo
 dnf clean all
 
 dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
@@ -137,7 +137,7 @@ mkdir -p /srv/mall
 
 ### 3.5 登录 ACR（让 ECS 能拉私有镜像）
 ```bash
-docker login registry.cn-hangzhou.aliyuncs.com
+docker login registry.cn-shanghai.aliyuncs.com
 # 用户名=你的阿里云账号登录名；密码=ACR 控制台「访问凭证」里设置的固定密码（见第 6 节）
 ```
 
@@ -164,7 +164,7 @@ docker login registry.cn-hangzhou.aliyuncs.com
 ## 5. GitHub 建仓 + push 代码
 
 - [ ] GitHub → New repository → 建**私有**仓库（名字随意，如 `mall`），不要勾选初始化 README（保持空库，方便 push 现有仓库）。
-- [ ] 本地把仓库指过去并推送（推荐 SSH，GitHub 的 SSH 用户名是标准的 `git`，没有云效那些幺蛾子）：
+- [ ] 本地把仓库指过去并推送（推荐 SSH，GitHub 的 SSH 用户名是标准的 `git`）：
 ```bash
 cd /Users/zhangyanlong/Workspace/baily/mall
 git remote add origin git@github.com:<你的用户名>/mall.git   # 或 https://github.com/<用户名>/mall.git
@@ -185,7 +185,7 @@ git push -u origin master
 
 ## 7. GitHub Actions 建流水线（workflow 文件）
 
-> 云效 Flow 那套「图形化四阶段」这里换成**一个 yaml 文件**：`.github/workflows/deploy.yml`（仓库里已放好，push 到 GitHub 后自动生效）。它做四件事：检出代码 → 登录 ACR → docker build 三个镜像并 push → SSH 到 ECS 拉取并 up。
+> 流水线就是一个 yaml 文件：`.github/workflows/deploy.yml`（仓库里已放好，push 到 GitHub 后自动生效）。它做四件事：检出代码 → 登录 ACR → docker build 三个镜像并 push → SSH 到 ECS 拉取并 up。
 
 ### 7.1 了解 workflow（已写好，不用手写）
 `.github/workflows/deploy.yml` 流程：`push 到 master 触发` → `docker build -f apps/xxx/Dockerfile` 打 3 个镜像（Dockerfile 里自带 corepack + pnpm install + build，所以不用单独跑构建）→ `push 到 ACR` → `SSH 到 ECS 执行 compose pull + up`。
@@ -216,7 +216,7 @@ git push -u origin master
 ### 8.1 准备 .env.prod
 - [ ] 在 ECS `/srv/mall/` 执行 `cp .env.prod.example .env.prod`，改真实值。**`REGISTRY` 没有默认值、必须改成你的 ACR 地址，否则 compose 直接报 `variable REGISTRY not set`**：
 ```ini
-REGISTRY=registry.cn-hangzhou.aliyuncs.com/mall   # 改成你的 ACR 命名空间地址
+REGISTRY=registry.cn-shanghai.aliyuncs.com/mall   # 改成你的 ACR 命名空间地址
 IMAGE_TAG=<git SHA>                              # 也可不写，部署时 export 覆盖（见 8.2）
 DATABASE_URL="postgresql://mall:mall123@db:5432/mall?schema=public"
 POSTGRES_USER=mall
