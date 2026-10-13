@@ -177,8 +177,8 @@ git push -u origin main
 
 ## 6. ACR 建镜像仓库
 
-- [ ] ACR 控制台 → 命名空间 → 新建 `mall`。
-- [ ] 在 `mall` 命名空间下建 3 个仓库：`mall-server`、`mall-h5`、`mall-admin`（每个仓库=一个镜像名）。
+- [ ] ACR 控制台 → 命名空间 → 新建 `shopping-mall`。
+- [ ] 在 `shopping-mall` 命名空间下建 3 个仓库：`mall-server`、`mall-h5`、`mall-admin`（每个仓库=一个镜像名）。
 - [ ] ACR 个人版 → 「**设置固定密码**」，记下用户名 + 密码 → 这是流水线和 ECS `docker login` 用的 `ACR_USER` / `ACR_PASS`。
 
 ---
@@ -222,7 +222,7 @@ git push -u origin main
 ### 8.1 准备 .env.prod
 - [ ] 在 ECS `/srv/mall/` 执行 `cp .env.prod.example .env.prod`，改真实值。**`REGISTRY` 没有默认值、必须改成你的 ACR 地址，否则 compose 直接报 `variable REGISTRY not set`**：
 ```ini
-REGISTRY=crpi-csvbaxkcha7nlevp.cn-shanghai.personal.cr.aliyuncs.com/mall   # 你的 ACR 个人版地址 + 命名空间
+REGISTRY=crpi-csvbaxkcha7nlevp.cn-shanghai.personal.cr.aliyuncs.com/shopping-mall   # 你的 ACR 个人版地址 + 命名空间
 IMAGE_TAG=<git SHA>                              # 也可不写，部署时 export 覆盖（见 8.2）
 DATABASE_URL="postgresql://mall:mall123@db:5432/mall?schema=public"
 POSTGRES_USER=mall
