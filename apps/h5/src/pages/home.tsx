@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Grid, NavBar, SearchBar, Swiper, Toast } from 'antd-mobile';
+import { motion } from 'framer-motion';
+import { SearchBar, Swiper, Toast } from 'antd-mobile';
+import { Gift, Zap, ChevronRight } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { listBrands, listCategories, listProducts } from '../api/store';
 import type { BrandRow, CategoryNode, StoreProductRow } from '../api/store';
@@ -12,7 +14,9 @@ import BottomTabBar from '../components/TabBar';
 
 const PAGE_SIZE = 10;
 
-// 首页即商品列表页：轮播 Banner + 金刚区 + 分类/品牌/关键词筛选 + 分页加载，底部 TabBar 常驻
+const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
+// 首页即商品列表页：轮播 Banner + 金刚区 + 领券/秒杀入口 + 分类/品牌/关键词筛选 + 分页加载，底部 TabBar 常驻
 export default function Home() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -133,11 +137,28 @@ export default function Home() {
   };
 
   return (
-    <div className="page tab-page">
-      <NavBar back={null}>商城</NavBar>
+    <div className="page tab-page home-page">
+      <header className="home-header">
+        <div className="home-brand">
+          <span className="home-brand-mark" />
+          商城
+        </div>
+        <div className="home-search">
+          <SearchBar
+            placeholder="搜索商品"
+            defaultValue={keyword}
+            onSearch={(v) => updateParams({ keyword: v || undefined })}
+          />
+        </div>
+      </header>
 
       {banners.length > 0 && (
-        <div className="home-banner">
+        <motion.div
+          className="home-banner"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: EASE }}
+        >
           <Swiper autoplay loop>
             {banners.map((b) => (
               <Swiper.Item key={b.id} onClick={() => handleLink(b.linkType, b.linkValue)}>
@@ -145,37 +166,65 @@ export default function Home() {
               </Swiper.Item>
             ))}
           </Swiper>
-        </div>
+        </motion.div>
       )}
 
       {navIcons.length > 0 && (
-        <div className="home-nav">
-          <Grid columns={5}>
-            {navIcons.map((n) => (
-              <Grid.Item key={n.id} onClick={() => handleLink(n.linkType, n.linkValue)}>
-                <div className="nav-icon">
-                  <img className="nav-icon-img" src={n.image} alt={n.name} />
-                  <span className="nav-icon-name">{n.name}</span>
-                </div>
-              </Grid.Item>
-            ))}
-          </Grid>
-        </div>
+        <nav className="home-nav">
+          {navIcons.map((n, i) => (
+            <motion.div
+              key={n.id}
+              className="nav-icon"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.04 * i, duration: 0.45, ease: EASE }}
+              whileTap={{ scale: 0.94 }}
+              onClick={() => handleLink(n.linkType, n.linkValue)}
+            >
+              <img className="nav-icon-img" src={n.image} alt={n.name} />
+              <span className="nav-icon-name">{n.name}</span>
+            </motion.div>
+          ))}
+        </nav>
       )}
 
-      <div className="coupon-entry" onClick={() => navigate('/coupons')}>
-        <span>🎁 领券中心</span>
-        <span className="coupon-entry-arrow">›</span>
+      <div className="home-entries">
+        <motion.div
+          className="entry entry-coupon"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12, duration: 0.45, ease: EASE }}
+          whileTap={{ scale: 0.97 }}
+          onClick={() => navigate('/coupons')}
+        >
+          <span className="entry-icon">
+            <Gift size={18} strokeWidth={1.75} />
+          </span>
+          <div className="entry-text">
+            <div className="entry-title">领券中心</div>
+            <div className="entry-sub">限量好券 · 先领再买</div>
+          </div>
+          <ChevronRight className="entry-arrow" size={16} />
+        </motion.div>
+        <motion.div
+          className="entry entry-seckill"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18, duration: 0.45, ease: EASE }}
+          whileTap={{ scale: 0.97 }}
+          onClick={() => navigate('/seckill')}
+        >
+          <span className="entry-icon">
+            <Zap size={18} strokeWidth={1.75} />
+          </span>
+          <div className="entry-text">
+            <div className="entry-title">秒杀专区</div>
+            <div className="entry-sub">限时特价 · 手慢无</div>
+          </div>
+          <ChevronRight className="entry-arrow" size={16} />
+        </motion.div>
       </div>
-      <div className="seckill-entry" onClick={() => navigate('/seckill')}>
-        <span>⚡ 秒杀专区</span>
-        <span className="coupon-entry-arrow">›</span>
-      </div>
-      <SearchBar
-        placeholder="搜索商品"
-        defaultValue={keyword}
-        onSearch={(v) => updateParams({ keyword: v || undefined })}
-      />
+
       <CategoryBar categories={categories} activeId={categoryIdNum} onSelect={selectCategory} />
 
       {brands.length > 0 && (

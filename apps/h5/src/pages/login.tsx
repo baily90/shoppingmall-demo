@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Button, Input, NavBar, Toast } from 'antd-mobile';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 import { getErrorMessage } from '../api/request';
+
+const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 export default function Login() {
   const navigate = useNavigate();
@@ -44,7 +47,12 @@ export default function Login() {
   return (
     <div className="page">
       <NavBar onBack={() => navigate(-1)}>{mode === 'login' ? '登录' : '注册'}</NavBar>
-      <div className="login-form">
+      <motion.div
+        className="login-form"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: EASE }}
+      >
         <div className="login-title">{mode === 'login' ? '欢迎回来' : '创建账号'}</div>
         <Input
           placeholder="请输入手机号"
@@ -80,7 +88,7 @@ export default function Login() {
         >
           {mode === 'login' ? '没有账号？去注册' : '已有账号？去登录'}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

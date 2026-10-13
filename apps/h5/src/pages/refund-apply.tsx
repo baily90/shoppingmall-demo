@@ -50,7 +50,7 @@ export default function RefundApply() {
   };
 
   return (
-    <div className="page">
+    <div className="page od-page">
       <NavBar onBack={() => navigate(-1)}>申请售后</NavBar>
       {order && (
         <>

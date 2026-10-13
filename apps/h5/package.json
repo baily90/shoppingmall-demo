@@ -13,6 +13,8 @@
     "@mall/shared": "workspace:*",
     "antd-mobile": "^5.43.0",
     "axios": "^1.20.0",
+    "framer-motion": "^14.1.0",
+    "lucide-react": "^1.55.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4"

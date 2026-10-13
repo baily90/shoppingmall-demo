@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, List, NavBar, Popup, TextArea, Toast } from 'antd-mobile';
+import { Check, ChevronRight, MapPin } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createOrder, listAddresses } from '../api/trade';
 import type { Address } from '../api/trade';
@@ -130,23 +131,26 @@ export default function Checkout() {
 
       {/* 收货地址 */}
       <div className="checkout-block checkout-addr" onClick={() => setAddrPopup(true)}>
-        {selectedAddr ? (
-          <>
-            <div className="addr-line">
-              <span className="addr-name">{selectedAddr.receiverName}</span>
-              <span>{selectedAddr.receiverPhone}</span>
-            </div>
-            <div className="addr-detail">
-              {selectedAddr.province}
-              {selectedAddr.city}
-              {selectedAddr.district}
-              {selectedAddr.detail}
-            </div>
-          </>
-        ) : (
-          <div className="addr-empty">请选择收货地址</div>
-        )}
-        <span className="addr-arrow">›</span>
+        <MapPin className="checkout-addr-pin" size={20} strokeWidth={1.75} />
+        <div className="checkout-addr-text">
+          {selectedAddr ? (
+            <>
+              <div className="addr-line">
+                <span className="addr-name">{selectedAddr.receiverName}</span>
+                <span>{selectedAddr.receiverPhone}</span>
+              </div>
+              <div className="addr-detail">
+                {selectedAddr.province}
+                {selectedAddr.city}
+                {selectedAddr.district}
+                {selectedAddr.detail}
+              </div>
+            </>
+          ) : (
+            <div className="addr-empty">请选择收货地址</div>
+          )}
+        </div>
+        <ChevronRight className="addr-arrow" size={18} strokeWidth={2} />
       </div>
 
       {/* 商品清单 */}
@@ -176,7 +180,7 @@ export default function Checkout() {
               : usableCoupons.length > 0
                 ? `${usableCoupons.length} 张可用`
                 : '暂无可用'}
-            <span className="addr-arrow">›</span>
+            <ChevronRight size={15} strokeWidth={2} style={{ color: 'var(--c-text-3)' }} />
           </span>
         </div>
       </div>
@@ -241,7 +245,9 @@ export default function Checkout() {
                 <div className="addr-line">
                   <span className="addr-name">{a.receiverName}</span>
                   <span>{a.receiverPhone}</span>
-                  {a.id === selectedAddrId && <span className="addr-check">✓</span>}
+                  {a.id === selectedAddrId && (
+                    <Check className="addr-check" size={18} strokeWidth={2.5} />
+                  )}
                 </div>
                 <div className="addr-detail">
                   {a.province}
@@ -272,7 +278,9 @@ export default function Checkout() {
             }}
           >
             <span>不使用优惠券</span>
-            {selectedCouponId === undefined && <span className="addr-check">✓</span>}
+            {selectedCouponId === undefined && (
+              <Check className="addr-check" size={18} strokeWidth={2.5} />
+            )}
           </div>
           {usableCoupons.length === 0 ? (
             <div className="empty">暂无可用优惠券</div>
@@ -287,7 +295,9 @@ export default function Checkout() {
                 }}
               >
                 <CouponCard coupon={c.coupon}>
-                  {c.id === selectedCouponId && <span className="addr-check">✓</span>}
+                  {c.id === selectedCouponId && (
+                    <Check className="addr-check" size={18} strokeWidth={2.5} />
+                  )}
                 </CouponCard>
               </div>
             ))

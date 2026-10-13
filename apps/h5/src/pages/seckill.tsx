@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, NavBar, Toast } from 'antd-mobile';
+import { Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getSeckillActivities, grabSeckill, getSeckillResult } from '../api/seckill';
 import type { SeckillActivity } from '../api/seckill';
@@ -130,7 +131,10 @@ export default function Seckill() {
           {activities.map((activity) => (
             <div className="seckill-activity" key={activity.activityId}>
               <div className="seckill-activity-head">
-                <span className="seckill-activity-name">{activity.name}</span>
+                <span className="seckill-activity-name">
+                  <Zap size={16} strokeWidth={2} />
+                  {activity.name}
+                </span>
                 <span className="seckill-activity-time">
                   {fmtTime(activity.startTime)} ~ {fmtTime(activity.endTime)}
                 </span>

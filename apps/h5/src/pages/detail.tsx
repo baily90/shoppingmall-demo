@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, NavBar, Rate, Stepper, Swiper, Tag, Toast } from 'antd-mobile';
+import { motion } from 'framer-motion';
+import { Rate, Swiper, Toast } from 'antd-mobile';
+import { ChevronLeft, Heart, Minus, Plus } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getProduct } from '../api/store';
 import type { ProductDetail, Sku } from '../api/store';
@@ -179,10 +181,18 @@ export default function Detail() {
     });
   };
 
+  const maxQty = matchedSku?.stock ?? 99;
+  const soldOut = matchedSku != null && matchedSku.stock === 0;
+
   if (!detail) {
     return (
       <div className="page">
-        <NavBar onBack={() => navigate(-1)}>商品详情</NavBar>
+        <header className="detail-header">
+          <button className="detail-back" onClick={() => navigate(-1)} aria-label="返回">
+            <ChevronLeft size={22} strokeWidth={2.25} />
+          </button>
+          <div className="detail-header-title">商品详情</div>
+        </header>
         <div className="empty">加载中…</div>
       </div>
     );
@@ -190,7 +200,12 @@ export default function Detail() {
 
   return (
     <div className="page detail-page">
-      <NavBar onBack={() => navigate(-1)}>商品详情</NavBar>
+      <header className="detail-header">
+        <button className="detail-back" onClick={() => navigate(-1)} aria-label="返回">
+          <ChevronLeft size={22} strokeWidth={2.25} />
+        </button>
+        <div className="detail-header-title">商品详情</div>
+      </header>
 
       {images.length > 0 && (
         <Swiper>
@@ -204,19 +219,22 @@ export default function Detail() {
 
       <div className="detail-body">
         <div className="detail-price-row">
-          <span className="price">{formatPrice(displayPrice)}</span>
-          {matchedSku?.originalPrice != null && matchedSku.originalPrice > matchedSku.price && (
-            <span className="original">{formatPrice(matchedSku.originalPrice)}</span>
-          )}
-          {!matchedSku && detail.skus.length > 1 && <span className="from">起</span>}
-          <button
+          <div className="detail-price-main">
+            <span className="price">{formatPrice(displayPrice)}</span>
+            {matchedSku?.originalPrice != null && matchedSku.originalPrice > matchedSku.price && (
+              <span className="original">{formatPrice(matchedSku.originalPrice)}</span>
+            )}
+            {!matchedSku && detail.skus.length > 1 && <span className="from">起</span>}
+          </div>
+          <motion.button
             type="button"
             className={`detail-fav${favorited ? ' active' : ''}`}
+            whileTap={{ scale: 0.9 }}
             onClick={() => void toggleFavorite()}
           >
-            {favorited ? '♥' : '♡'}
+            <Heart size={20} fill={favorited ? 'currentColor' : 'none'} strokeWidth={1.75} />
             <span>{favorited ? '已收藏' : '收藏'}</span>
-          </button>
+          </motion.button>
         </div>
         <h1 className="detail-name">{detail.name}</h1>
         {detail.subTitle && <div className="detail-sub">{detail.subTitle}</div>}
@@ -228,14 +246,15 @@ export default function Detail() {
               {group.values.map((v) => {
                 const active = selected[group.id] === v.id;
                 return (
-                  <Tag
+                  <motion.button
                     key={v.id}
-                    color={active ? 'primary' : 'default'}
-                    fill={active ? 'solid' : 'outline'}
+                    type="button"
+                    className={`spec-chip${active ? ' active' : ''}`}
+                    whileTap={{ scale: 0.94 }}
                     onClick={() => toggleSpec(group.id, v.id)}
                   >
                     {v.value}
-                  </Tag>
+                  </motion.button>
                 );
               })}
             </div>
@@ -244,12 +263,23 @@ export default function Detail() {
 
         <div className="spec-group">
           <div className="spec-group-name">数量</div>
-          <Stepper
-            value={quantity}
-            min={1}
-            max={matchedSku?.stock ?? 99}
-            onChange={(v) => setQuantity(v)}
-          />
+          <div className="qty">
+            <button
+              type="button"
+              className="qty-btn"
+              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+            >
+              <Minus size={16} />
+            </button>
+            <span className="qty-num">{quantity}</span>
+            <button
+              type="button"
+              className="qty-btn"
+              onClick={() => setQuantity((q) => Math.min(maxQty, q + 1))}
+            >
+              <Plus size={16} />
+            </button>
+          </div>
         </div>
 
         {matchedSku && (
@@ -269,52 +299,31 @@ export default function Detail() {
       <div className="detail-desc">
         <div className="detail-desc-title">商品评价（{detail.reviewCount}）</div>
         {detail.reviewCount > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: 22, fontWeight: 700, color: '#ff4d4f' }}>
-              {detail.ratingAvg.toFixed(1)}
-            </span>
+          <div className="review-summary">
+            <span className="review-summary-score">{detail.ratingAvg.toFixed(1)}</span>
             <Rate readOnly allowHalf value={Math.round(detail.ratingAvg * 2) / 2} />
           </div>
         )}
         {reviews.length === 0 && <div className="empty">暂无评价</div>}
         {sortedReviews.map((r) => (
-          <div key={r.id} style={{ padding: '10px 0', borderTop: '1px solid #f5f5f5' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span
-                style={{
-                  fontSize: 13,
-                  color: '#999',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
+          <div key={r.id} className="review-item">
+            <div className="review-head">
+              <span className="review-user">
                 {r.nickname}
                 {r.skuSpec ? ` · ${r.skuSpec}` : ''}
-                {r.mine && (
-                  <Tag color="primary" fill="outline">
-                    我的评价
-                  </Tag>
-                )}
+                {r.mine && <span className="review-mine">我的评价</span>}
               </span>
               <Rate readOnly value={r.rating} style={{ '--star-size': '12px' }} />
             </div>
-            {r.content && <div style={{ marginTop: 6, fontSize: 14 }}>{r.content}</div>}
+            {r.content && <div className="review-content">{r.content}</div>}
             {r.images.length > 0 && (
-              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+              <div className="review-images">
                 {r.images.map((url, idx) => (
-                  <img
-                    key={idx}
-                    src={url}
-                    alt=""
-                    style={{ width: 72, height: 72, objectFit: 'contain', borderRadius: 4 }}
-                  />
+                  <img key={idx} src={url} alt="" className="review-image" />
                 ))}
               </div>
             )}
-            <div style={{ marginTop: 6, fontSize: 12, color: '#bbb' }}>
-              {r.createdAt.slice(0, 10)}
-            </div>
+            <div className="review-time">{r.createdAt.slice(0, 10)}</div>
             {r.replyContent && (
               <div className="review-reply">
                 <span className="review-reply-label">商家回复</span>
@@ -325,36 +334,31 @@ export default function Detail() {
           </div>
         ))}
         {reviews.length < reviewTotal && (
-          <Button
-            block
-            size="small"
-            style={{ marginTop: 8 }}
-            onClick={() => void loadReviews(reviewPage + 1)}
-          >
+          <button type="button" className="more" onClick={() => void loadReviews(reviewPage + 1)}>
             加载更多评价
-          </Button>
+          </button>
         )}
       </div>
 
       <div className="detail-footer">
-        <Button
-          block
-          color="primary"
-          size="large"
+        <motion.button
+          type="button"
+          className="btn btn-ghost"
+          whileTap={{ scale: 0.97 }}
           onClick={() => void addToCart()}
-          disabled={matchedSku != null && matchedSku.stock === 0}
+          disabled={soldOut}
         >
           加入购物车
-        </Button>
-        <Button
-          block
-          color="danger"
-          size="large"
+        </motion.button>
+        <motion.button
+          type="button"
+          className="btn btn-primary"
+          whileTap={{ scale: 0.97 }}
           onClick={buyNow}
-          disabled={matchedSku != null && matchedSku.stock === 0}
+          disabled={soldOut}
         >
           立即购买
-        </Button>
+        </motion.button>
       </div>
     </div>
   );

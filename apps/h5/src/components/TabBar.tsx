@@ -1,11 +1,12 @@
-import { TabBar } from 'antd-mobile';
+import { Home, ShoppingCart, User } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCartCount } from '../store/cart';
 
-const tabs = [
-  { key: '/', title: '首页', icon: '🏠' },
-  { key: '/cart', title: '购物车', icon: '🛒' },
-  { key: '/mine', title: '我的', icon: '👤' },
+const tabs: { key: string; title: string; icon: LucideIcon }[] = [
+  { key: '/', title: '首页', icon: Home },
+  { key: '/cart', title: '购物车', icon: ShoppingCart },
+  { key: '/mine', title: '我的', icon: User },
 ];
 
 /** 底部导航栏：首页 / 购物车 / 我的（仅在带 tab 的页面展示） */
@@ -17,16 +18,25 @@ export default function BottomTabBar() {
 
   return (
     <div className="tab-bar">
-      <TabBar activeKey={activeKey} onChange={(key) => navigate(key)}>
-        {tabs.map((t) => (
-          <TabBar.Item
+      {tabs.map((t) => {
+        const Icon = t.icon;
+        const active = t.key === activeKey;
+        return (
+          <div
             key={t.key}
-            icon={<span className="tab-icon">{t.icon}</span>}
-            title={t.title}
-            badge={t.key === '/cart' && count > 0 ? count : undefined}
-          />
-        ))}
-      </TabBar>
+            className={`tab-item${active ? ' active' : ''}`}
+            onClick={() => navigate(t.key)}
+          >
+            <div className="tab-item-icon">
+              <Icon size={22} strokeWidth={active ? 2.1 : 1.75} />
+              {t.key === '/cart' && count > 0 && (
+                <span className="tab-badge">{count > 99 ? '99+' : count}</span>
+              )}
+            </div>
+            <span className="tab-item-title">{t.title}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

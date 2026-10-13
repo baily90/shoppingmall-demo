@@ -109,7 +109,7 @@ export default function OrderDetailPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page od-page">
       <NavBar onBack={() => navigate(-1)}>订单详情</NavBar>
       <div className="od-status">
         {activeRefund ? REFUND_STATUS_TEXT[activeRefund.status] : ORDER_STATUS_TEXT[order.status]}

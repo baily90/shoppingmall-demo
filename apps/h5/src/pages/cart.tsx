@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Checkbox, NavBar, Popup, Stepper, Toast } from 'antd-mobile';
+import { ChevronRight, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { listCart, removeCartItem, updateCartItem } from '../api/trade';
 import type { CartItem } from '../api/trade';
@@ -159,9 +160,12 @@ export default function Cart() {
                   />
                 </div>
               </div>
-              <span className="cart-del" onClick={() => void remove(item)}>
-                ×
-              </span>
+              <Trash2
+                className="cart-del"
+                size={17}
+                strokeWidth={1.75}
+                onClick={() => void remove(item)}
+              />
             </div>
           ))}
         </div>
@@ -174,7 +178,7 @@ export default function Cart() {
           <div className="cart-total" onClick={() => setDetailPopup(true)}>
             <div>
               合计：<span className="price">{formatPrice(totalPrice - discount)}</span>
-              <span className="cart-total-arrow">›</span>
+              <ChevronRight className="cart-total-arrow" size={14} strokeWidth={2} />
             </div>
             {bestCoupon && discount > 0 && (
               <div className="cart-coupon-hint">

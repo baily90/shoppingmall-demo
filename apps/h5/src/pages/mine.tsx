@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { Badge, Button, Dialog, List, NavBar, Toast } from 'antd-mobile';
+import { CircleCheck, ChevronRight, Package, RotateCcw, Truck, Wallet } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 import { getOrderCounts } from '../api/trade';
 import BottomTabBar from '../components/TabBar';
 
-const ORDER_SHORTCUTS = [
-  { status: '10', label: '待支付', icon: '💰' },
-  { status: '20', label: '待发货', icon: '📦' },
-  { status: '30', label: '待收货', icon: '🚚' },
-  { status: 'aftersale', label: '退款/售后', icon: '🔁' },
-  { status: '40', label: '已完成', icon: '✅' },
+const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
+const ORDER_SHORTCUTS: { status: string; label: string; icon: LucideIcon }[] = [
+  { status: '10', label: '待支付', icon: Wallet },
+  { status: '20', label: '待发货', icon: Package },
+  { status: '30', label: '待收货', icon: Truck },
+  { status: 'aftersale', label: '退款/售后', icon: RotateCcw },
+  { status: '40', label: '已完成', icon: CircleCheck },
 ];
 
 export default function Mine() {
@@ -63,22 +68,32 @@ export default function Mine() {
       <div className="mine-orders">
         <div className="mine-orders-head" onClick={() => navigate('/orders')}>
           <span>我的订单</span>
-          <span className="mine-orders-all">全部订单 ›</span>
+          <span className="mine-orders-all">
+            全部订单
+            <ChevronRight size={15} strokeWidth={2} />
+          </span>
         </div>
         <div className="mine-orders-grid">
-          {ORDER_SHORTCUTS.map((s) => {
+          {ORDER_SHORTCUTS.map((s, i) => {
+            const Icon = s.icon;
             const n = counts[s.status] ?? 0;
             return (
-              <div
+              <motion.div
                 key={s.status}
                 className="mine-order-item"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 * i, duration: 0.4, ease: EASE }}
+                whileTap={{ scale: 0.94 }}
                 onClick={() => navigate(`/orders?status=${s.status}`)}
               >
                 <Badge content={s.status !== '40' && n > 0 ? n : null}>
-                  <span className="mine-order-icon">{s.icon}</span>
+                  <span className="mine-order-icon">
+                    <Icon size={24} strokeWidth={1.75} />
+                  </span>
                 </Badge>
                 <span className="mine-order-label">{s.label}</span>
-              </div>
+              </motion.div>
             );
           })}
         </div>
