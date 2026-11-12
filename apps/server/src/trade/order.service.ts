@@ -2,7 +2,7 @@ import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../generated/prisma/index.js';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';

@@ -5,6 +5,7 @@ import { CurrentUser, UserContext } from '../common/decorators/current-user.deco
 import { RegisterDto } from './dto/register.dto';
 import { UserLoginDto } from './dto/user-login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UserAuthService } from './user-auth.service';
 
 @Controller('auth')
@@ -26,6 +27,12 @@ export class UserAuthController {
   @Post('refresh')
   refresh(@Body() dto: RefreshDto) {
     return this.userAuthService.refresh(dto.refreshToken);
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('password/reset')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.userAuthService.resetPassword(dto);
   }
 
   @UseGuards(UserJwtAuthGuard)

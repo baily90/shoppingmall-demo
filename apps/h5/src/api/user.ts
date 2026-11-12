@@ -20,6 +20,9 @@ export const login = (phone: string, password: string) =>
 export const register = (phone: string, password: string, nickname?: string) =>
   request.post<ApiResponse<LoginResult>>('/auth/register', { phone, password, nickname });
 
+export const resetPassword = (phone: string, password: string) =>
+  request.post<ApiResponse<null>>('/auth/password/reset', { phone, password });
+
 export const logout = (refreshToken: string) => request.post('/auth/logout', { refreshToken });
 
 export const getProfile = () => request.get<ApiResponse<UserInfo>>('/auth/profile');

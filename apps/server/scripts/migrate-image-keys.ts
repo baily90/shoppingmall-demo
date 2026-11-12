@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../generated/prisma/index.js';
 
 /**
  * 存量图片地址迁移：把 DB 里写死的绝对 URL（http://host:port/{bucket}/key）归一化成对象 key。

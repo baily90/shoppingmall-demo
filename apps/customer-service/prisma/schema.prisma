@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+  // 生成到本应用自己的目录，避免与 server 共享提升后的 @prisma/client 互相覆盖
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// FAQ 知识库文档（RAG 检索源）
+// embedding 列用 pgvector 的 vector 类型（维度 1024，对应 BGE bge-large-zh-v1.5）
+model FaqDocument {
+  id        Int                      @id @default(autoincrement())
+  question  String
+  answer    String
+  category  String                   @default("general")
+  embedding Unsupported("public.vector(1024)")?
+  createdAt DateTime                 @default(now()) @map("created_at")
+  updatedAt DateTime                 @updatedAt @map("updated_at")
+
+  @@map("faq_documents")
+}
+
+// 客服会话（对话元数据）
+model ChatSession {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  title     String?
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  messages     ChatMessage[]
+  sessionState ChatSessionState?
+
+  @@map("chat_sessions")
+}
+
+// 客服消息日志（append-only，唯一真相；parts 存 UIMessage 的 parts）
+model ChatMessage {
+  id        String   @id @default(uuid())
+  sessionId String   @map("session_id")
+  seq       Int
+  role      String
+  parts     Json
+  tokenEst  Int      @default(0) @map("token_est")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, seq])
+  @@map("chat_messages")
+}
+
+// 客服会话压缩状态（summary + 水位线 + slots；窗口不落库，靠水位线懒重建）
+model ChatSessionState {
+  sessionId      String   @id @map("session_id")
+  summary        String?
+  summaryUpToSeq Int      @default(0) @map("summary_up_to_seq")
+  slots          Json?
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("chat_session_states")
+}

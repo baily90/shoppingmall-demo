@@ -1,5 +1,7 @@
 generator client {
   provider = "prisma-client-js"
+  // 生成到本应用自己的目录，避免与 customer-service 共享提升后的 @prisma/client 互相覆盖
+  output   = "../generated/prisma"
 }
 
 datasource db {

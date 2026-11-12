@@ -1,0 +1,46 @@
+{
+  "name": "customer-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "电商智能客服服务（AI SDK 7 + DeepSeek + BGE embedding/reranker + pgvector + Langfuse）",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "faq:seed": "tsx prisma/seed-faq.ts",
+    "eval": "tsx src/eval/run-eval.ts",
+    "rag-eval": "tsx src/eval/rag-eval.ts",
+    "generation-eval": "tsx src/eval/generation-eval.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/deepseek": "3.0.74",
+    "@ai-sdk/openai-compatible": "3.0.79",
+    "@ai-sdk/provider": "^4.0.34",
+    "@langfuse/client": "6.0.2",
+    "@langfuse/otel": "6.0.2",
+    "@langfuse/tracing": "6.0.2",
+    "@langfuse/vercel-ai-sdk": "6.0.2",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/sdk-node": "0.222.0",
+    "@prisma/client": "^6.0.0",
+    "ai": "7.0.154",
+    "dotenv": "^18.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "prisma": "^6.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.3"
+  }
+}

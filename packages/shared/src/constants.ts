@@ -17,6 +17,7 @@ export const ErrorCode = {
   REFUND_STATE_INVALID: 10014,
   REVIEW_EXISTS: 10015,
   REVIEW_STATE_INVALID: 10016,
+  USER_NOT_FOUND: 10017,
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

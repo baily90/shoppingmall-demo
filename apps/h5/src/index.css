@@ -541,6 +541,13 @@ body {
   margin-top: 16px;
   cursor: pointer;
 }
+.login-forgot {
+  text-align: right;
+  color: var(--c-text-3);
+  font-size: 13px;
+  margin: -4px 0 14px;
+  cursor: pointer;
+}
 
 /* ==================== 购物车 ==================== */
 .cart-list {

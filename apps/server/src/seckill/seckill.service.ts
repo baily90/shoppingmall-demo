@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../generated/prisma/index.js';
 import { ErrorCode } from '@mall/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';

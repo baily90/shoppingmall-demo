@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { unstableSetRender } from 'antd-mobile';
 import './index.css';
 import App from './App.tsx';
+import ChatBubble from './components/ChatBubble';
 import { AuthProvider } from './store/auth';
 import { CartCountProvider } from './store/cart';
 
@@ -34,6 +35,7 @@ createRoot(document.getElementById('root')!).render(
     <AuthProvider>
       <CartCountProvider>
         <App />
+        <ChatBubble />
       </CartCountProvider>
     </AuthProvider>
   </StrictMode>,

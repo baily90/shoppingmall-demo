@@ -7,6 +7,7 @@ import { TokenService } from './token.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { RegisterDto } from './dto/register.dto';
 import { UserLoginDto } from './dto/user-login.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class UserAuthService {
@@ -91,5 +92,18 @@ export class UserAuthService {
       avatar: this.storage.toPublicUrl(user.avatar),
       gender: user.gender,
     };
+  }
+
+  /** 忘记密码：按手机号直接重置为新密码 */
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
+    if (!user) {
+      throw new BusinessException(ErrorCode.USER_NOT_FOUND, '该手机号未注册');
+    }
+
+    const password = await bcrypt.hash(dto.password, 10);
+    await this.prisma.user.update({ where: { id: user.id }, data: { password } });
+
+    return null;
   }
 }

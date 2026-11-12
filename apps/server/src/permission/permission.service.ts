@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Permission } from '@prisma/client';
+import { Permission } from '../../generated/prisma/index.js';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface MenuNode {

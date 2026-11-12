@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.167",
     "@mall/shared": "workspace:*",
+    "ai": "7.0.163",
     "antd-mobile": "^5.43.0",
     "axios": "^1.20.0",
     "framer-motion": "^14.1.0",

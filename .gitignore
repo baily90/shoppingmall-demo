@@ -7,6 +7,9 @@ dist/
 build/
 *.tsbuildinfo
 
+# prisma 生成客户端（每应用独立 output，见各 schema.prisma 的 generator.output）
+**/generated/prisma/
+
 # environment（真实密钥只留在本地，禁止提交；仅放行 *.example 模板）
 .env
 .env.*
