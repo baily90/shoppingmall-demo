@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
@@ -14,36 +15,43 @@ import {
 import { PageQueryDto } from '../../common/dto/query.dto';
 
 export class CreateOrderItemDto {
+  @ApiProperty({ description: 'SKU id', example: 1 })
   @IsInt({ message: 'SKU id 必须为整数' })
   skuId: number;
 
+  @ApiProperty({ description: '购买数量', example: 1 })
   @IsInt({ message: '数量必须为整数' })
   @Min(1, { message: '数量至少为 1' })
   quantity: number;
 }
 
 export class CreateOrderDto {
+  @ApiProperty({ description: '订单商品列表', type: [CreateOrderItemDto] })
   @IsArray({ message: '商品必须是数组' })
   @ArrayNotEmpty({ message: '订单商品不能为空' })
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
   items: CreateOrderItemDto[];
 
+  @ApiProperty({ description: '收货地址 id' })
   @IsInt({ message: '地址 id 必须为整数' })
   addressId: number;
 
+  @ApiPropertyOptional({ description: '订单备注（最多 200 字）' })
   @IsOptional()
   @IsString()
   @MaxLength(200, { message: '备注最多 200 字' })
   remark?: string;
 
   /** 幂等键：同一 key 重复提交（如双击）只建一单，防重复下单 */
+  @ApiPropertyOptional({ description: '幂等键：同一 key 重复提交只建一单（防重复下单）' })
   @IsOptional()
   @IsString()
   @MaxLength(64, { message: '幂等键最多 64 字' })
   idempotencyKey?: string;
 
   /** 选用的用户券 id（UserCoupon.id，一单一券），不传则不使用优惠 */
+  @ApiPropertyOptional({ description: '选用的用户券 id（一单一券），不传则不用优惠' })
   @IsOptional()
   @IsInt({ message: '优惠券 id 必须为整数' })
   couponId?: number;
@@ -51,6 +59,7 @@ export class CreateOrderDto {
 
 /** 订单列表查询：分页 + 状态过滤（keyword 用于订单号搜索） */
 export class ListOrderDto extends PageQueryDto {
+  @ApiPropertyOptional({ description: '订单状态' })
   @IsOptional()
   @Type(() => Number)
   @IsInt({ message: '状态必须为整数' })
@@ -61,6 +70,7 @@ export class ListOrderDto extends PageQueryDto {
    * false 只看无进行中售后的（待发货/待收货 tab 要排除售后中的订单）。
    * 用 @Transform 手动解析，避免 Boolean('false') === true 的坑。
    */
+  @ApiPropertyOptional({ description: '是否只看有进行中售后的订单' })
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean({ message: 'refundActive 必须为布尔值' })
@@ -68,11 +78,13 @@ export class ListOrderDto extends PageQueryDto {
 }
 
 export class ShipOrderDto {
+  @ApiProperty({ description: '物流公司（最多 50 字）', example: '顺丰速运' })
   @IsString()
   @IsNotEmpty({ message: '物流公司不能为空' })
   @MaxLength(50, { message: '物流公司最多 50 字' })
   logisticsCompany: string;
 
+  @ApiProperty({ description: '物流单号（最多 50 字）', example: 'SF1234567890' })
   @IsString()
   @IsNotEmpty({ message: '物流单号不能为空' })
   @MaxLength(50, { message: '物流单号最多 50 字' })

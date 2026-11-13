@@ -1,8 +1,10 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { LoggerModule } from 'nestjs-pino';
+import { randomUUID } from 'node:crypto';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -20,11 +22,25 @@ import { RefundModule } from './refund/refund.module';
 import { ReviewModule } from './review/review.module';
 import { FavoriteModule } from './favorite/favorite.module';
 import { HomeModule } from './home/home.module';
-import { LoggingMiddleware } from './common/middleware/logging.middleware';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // 结构化日志（nestjs-pino）：生产输出 JSON（docker logs 采集），开发用 pino-pretty 美化
+    LoggerModule.forRoot({
+      pinoHttp: {
+        // 复用上游 x-request-id 作为请求 id，否则生成一个（保留原 LoggingMiddleware 的 traceId 语义）
+        genReqId: (req: any) =>
+          (typeof req?.headers?.['x-request-id'] === 'string' && req.headers['x-request-id']) ||
+          randomUUID(),
+        transport:
+          process.env.NODE_ENV === 'production'
+            ? undefined
+            : { target: 'pino-pretty', options: { singleLine: true, colorize: true } },
+        // 日志里脱敏敏感头（如 Authorization）
+        redact: { paths: ['req.headers.authorization'], censor: '***' },
+      },
+    }),
     // BullMQ 全局连接：复用阶段 1 的 Redis（订单延迟任务用）
     BullModule.forRootAsync({
       inject: [ConfigService],
@@ -56,8 +72,4 @@ import { LoggingMiddleware } from './common/middleware/logging.middleware';
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggingMiddleware).forRoutes('*');
-  }
-}
+export class AppModule {}

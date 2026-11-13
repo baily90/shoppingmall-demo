@@ -103,6 +103,8 @@ export class UserAuthService {
 
     const password = await bcrypt.hash(dto.password, 10);
     await this.prisma.user.update({ where: { id: user.id }, data: { password } });
+    // 改密码后踢掉该用户所有已登录设备（所有 refreshToken 立即失效）
+    await this.tokenService.revokeAll(user.id, 'user');
 
     return null;
   }

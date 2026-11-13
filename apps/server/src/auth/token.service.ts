@@ -51,6 +51,9 @@ export class TokenService {
     );
 
     await this.redisService.set(this.refreshKey(jti), `${type}:${sub}`, refreshExpiresIn);
+    // 维护 user → jti 索引（改密码后一次性踢掉该用户所有设备用）
+    await this.redisService.sadd(this.userKey(type, sub), jti);
+    await this.redisService.expire(this.userKey(type, sub), refreshExpiresIn);
 
     return { accessToken, refreshToken };
   }
@@ -63,6 +66,7 @@ export class TokenService {
       throw new BusinessException(ErrorCode.UNAUTHORIZED, '登录已失效，请重新登录');
     }
     await this.redisService.del(this.refreshKey(payload.jti!));
+    await this.redisService.srem(this.userKey(type, payload.sub), payload.jti!);
     return this.issueTokens(payload.sub, type);
   }
 
@@ -70,6 +74,17 @@ export class TokenService {
   async revoke(refreshToken: string, type: TokenType): Promise<void> {
     const payload = this.verifyRefresh(refreshToken, type);
     await this.redisService.del(this.refreshKey(payload.jti!));
+    await this.redisService.srem(this.userKey(type, payload.sub), payload.jti!);
+  }
+
+  /** 撤销某用户（admin/user）的所有 refreshToken：改密码/重置密码后踢掉所有已登录设备 */
+  async revokeAll(sub: number, type: TokenType): Promise<void> {
+    const key = this.userKey(type, sub);
+    const jtis = await this.redisService.smembers(key);
+    if (jtis.length > 0) {
+      await Promise.all(jtis.map((jti) => this.redisService.del(this.refreshKey(jti))));
+    }
+    await this.redisService.del(key);
   }
 
   private verifyRefresh(token: string, type: TokenType): JwtPayload {
@@ -89,5 +104,9 @@ export class TokenService {
 
   private refreshKey(jti: string): string {
     return `auth:refresh:${jti}`;
+  }
+
+  private userKey(type: TokenType, sub: number): string {
+    return `auth:refresh:user:${type}:${sub}`;
   }
 }

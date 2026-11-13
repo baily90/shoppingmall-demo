@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PermissionService } from '../permission/permission.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { BusinessException } from '../common/exceptions/business.exception';
+import { TokenService } from '../auth/token.service';
 import { AssignRolesDto, CreateAdminDto, UpdateAdminDto } from './dto/admin.dto';
 import { AssignPermissionsDto, CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { CreatePermissionDto, UpdatePermissionDto } from './dto/permission.dto';
@@ -16,6 +17,7 @@ export class SystemService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly permissionService: PermissionService,
+    private readonly tokenService: TokenService,
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
@@ -88,7 +90,11 @@ export class SystemService {
     if (dto.nickname !== undefined) data.nickname = dto.nickname;
     if (dto.avatar !== undefined) data.avatar = this.storage.urlToKey(dto.avatar) ?? null;
     if (dto.status !== undefined) data.status = dto.status;
-    if (dto.password !== undefined) data.password = await bcrypt.hash(dto.password, 10);
+    if (dto.password !== undefined) {
+      data.password = await bcrypt.hash(dto.password, 10);
+      // 改密码后踢掉该管理员所有已登录设备
+      await this.tokenService.revokeAll(id, 'admin');
+    }
     return this.prisma.adminUser.update({ where: { id }, data, select: { id: true } });
   }
 

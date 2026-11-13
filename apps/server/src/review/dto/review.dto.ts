@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -21,31 +22,37 @@ import {
 
 /** 提交商品评价（按订单项） */
 export class CreateReviewDto {
+  @ApiProperty({ description: '订单 id' })
   @Type(() => Number)
   @IsInt({ message: '订单 id 非法' })
   orderId: number;
 
+  @ApiProperty({ description: '订单项 id' })
   @Type(() => Number)
   @IsInt({ message: '订单项 id 非法' })
   orderItemId: number;
 
+  @ApiProperty({ description: '评分（1-5 星）', example: 5 })
   @Type(() => Number)
   @IsInt({ message: '评分必须为整数' })
   @Min(REVIEW_RATING_MIN, { message: '评分最低 1 星' })
   @Max(REVIEW_RATING_MAX, { message: '评分最高 5 星' })
   rating: number;
 
+  @ApiPropertyOptional({ description: '评价内容（最多 500 字）' })
   @IsOptional()
   @IsString()
   @MaxLength(500, { message: '评价内容最多 500 字' })
   content?: string;
 
+  @ApiPropertyOptional({ description: '评价图片 URL 列表', type: [String] })
   @IsOptional()
   @IsArray({ message: '评价图片必须是数组' })
   @ArrayMaxSize(MAX_REVIEW_IMAGES, { message: `评价图片最多 ${MAX_REVIEW_IMAGES} 张` })
   @IsString({ each: true, message: '图片 URL 必须为字符串' })
   images?: string[];
 
+  @ApiPropertyOptional({ description: '是否匿名', default: false })
   @IsOptional()
   @IsBoolean({ message: 'anonymous 必须为布尔值' })
   anonymous?: boolean;
@@ -59,16 +66,19 @@ export class ListReviewQueryDto extends PageQueryDto {}
 
 /** 管理端评价列表查询：分页 + 状态/评分/商品过滤 + 关键字 */
 export class AdminListReviewDto extends PageQueryDto {
+  @ApiPropertyOptional({ description: '评价状态' })
   @IsOptional()
   @Type(() => Number)
   @IsInt({ message: '状态必须为整数' })
   status?: number;
 
+  @ApiPropertyOptional({ description: '评分（1-5）' })
   @IsOptional()
   @Type(() => Number)
   @IsInt({ message: '评分必须为整数' })
   rating?: number;
 
+  @ApiPropertyOptional({ description: '商品 id' })
   @IsOptional()
   @Type(() => Number)
   @IsInt({ message: '商品 id 必须为整数' })
@@ -77,6 +87,7 @@ export class AdminListReviewDto extends PageQueryDto {
 
 /** 管理端设置评价展示状态（屏蔽/恢复） */
 export class SetReviewStatusDto {
+  @ApiProperty({ description: '状态：0 屏蔽 / 1 展示' })
   @Type(() => Number)
   @IsInt({ message: '状态必须为整数' })
   status: number;
@@ -84,6 +95,7 @@ export class SetReviewStatusDto {
 
 /** 管理端回复评价（单条，可覆盖） */
 export class ReplyDto {
+  @ApiProperty({ description: `回复内容（最多 ${MAX_REPLY_LENGTH} 字）` })
   @IsString({ message: '回复内容必须为字符串' })
   @IsNotEmpty({ message: '回复内容不能为空' })
   @MaxLength(MAX_REPLY_LENGTH, { message: `回复内容最多 ${MAX_REPLY_LENGTH} 字` })

@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { UserJwtAuthGuard } from '../common/guards/user-jwt-auth.guard';
 import { CurrentUser, UserContext } from '../common/decorators/current-user.decorator';
@@ -8,6 +9,7 @@ import { RefreshDto } from './dto/refresh.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UserAuthService } from './user-auth.service';
 
+@ApiTags('auth')
 @Controller('auth')
 export class UserAuthController {
   constructor(private readonly userAuthService: UserAuthService) {}
@@ -36,12 +38,14 @@ export class UserAuthController {
   }
 
   @UseGuards(UserJwtAuthGuard)
+  @ApiBearerAuth()
   @Post('logout')
   logout(@Body() dto: RefreshDto) {
     return this.userAuthService.logout(dto.refreshToken);
   }
 
   @UseGuards(UserJwtAuthGuard)
+  @ApiBearerAuth()
   @Get('profile')
   profile(@CurrentUser() user: UserContext) {
     return this.userAuthService.profile(user.id);

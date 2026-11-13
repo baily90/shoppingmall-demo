@@ -38,6 +38,22 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.del(key);
   }
 
+  async sadd(key: string, ...members: string[]): Promise<void> {
+    await this.client.sadd(key, ...members);
+  }
+
+  async smembers(key: string): Promise<string[]> {
+    return this.client.smembers(key);
+  }
+
+  async srem(key: string, ...members: string[]): Promise<void> {
+    await this.client.srem(key, ...members);
+  }
+
+  async expire(key: string, seconds: number): Promise<void> {
+    await this.client.expire(key, seconds);
+  }
+
   /** 读缓存对象：JSON 反序列化；读失败/缺失按 miss 处理（返回 null，走数据库） */
   async getJSON<T = any>(key: string): Promise<T | null> {
     try {

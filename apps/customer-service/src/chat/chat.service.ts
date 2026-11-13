@@ -50,9 +50,9 @@ export class ChatService {
   }
 
   // 处理一条用户消息：落库 → 组装上下文 → 流式生成
-  async chat(sessionId: string, userText: string, token: string) {
-    // ① 确保会话状态行存在
-    await this.sessionStore.ensureState(sessionId);
+  async chat(sessionId: string, userText: string, token: string, userId: string) {
+    // ① 确保会话存在且归属当前用户（首次创建并绑定 userId）
+    await this.sessionStore.ensureSession(sessionId, userId);
 
     // ② 用户消息先落库（append-only，可靠；seq 由 FOR UPDATE 悲观锁分配）
     await this.sessionStore.appendMessage({

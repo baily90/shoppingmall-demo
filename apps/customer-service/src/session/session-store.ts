@@ -4,7 +4,7 @@
 //   1. chat_messages 是唯一真相（append-only），窗口原文不落库，靠水位线懒重建
 //   2. chat_session_states 只存不可重建的部分：summary / summary_up_to_seq / slots
 //   3. 并发：消息 seq 用 FOR UPDATE 悲观锁串行化；状态推进用乐观锁（CAS）
-import { Inject, Injectable } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/index.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -30,12 +30,6 @@ export class SessionStore {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   // —— 会话 ——
-  async createSession(input: { userId?: string; title?: string } = {}) {
-    return this.prisma.chatSession.create({
-      data: { userId: input.userId ?? null, title: input.title ?? null },
-    });
-  }
-
   async getSession(sessionId: string) {
     return this.prisma.chatSession.findUnique({ where: { id: sessionId } });
   }
@@ -86,15 +80,16 @@ export class SessionStore {
     return this.prisma.chatSessionState.findUnique({ where: { sessionId } });
   }
 
-  // 确保会话 + 状态行存在（首次使用时创建；sessionId 由前端生成、作为会话主键）
-  async ensureState(sessionId: string) {
-    // ① 会话行（消息/状态都外键依赖它）
-    await this.prisma.chatSession.upsert({
-      where: { id: sessionId },
-      create: { id: sessionId },
-      update: {},
-    });
-    // ② 状态行（summary / 水位线 / slots）
+  // 确保会话存在且归属当前用户 + 状态行存在：
+  // 首次使用时创建并绑定 userId；存在但属于他人则拒绝（防止跨用户访问会话）
+  async ensureSession(sessionId: string, userId: string) {
+    const existing = await this.prisma.chatSession.findUnique({ where: { id: sessionId } });
+    if (!existing) {
+      await this.prisma.chatSession.create({ data: { id: sessionId, userId } });
+    } else if (existing.userId !== userId) {
+      throw new ForbiddenException('无权访问该会话');
+    }
+    // 状态行（summary / 水位线 / slots）
     await this.prisma.chatSessionState.upsert({
       where: { sessionId },
       create: { sessionId },

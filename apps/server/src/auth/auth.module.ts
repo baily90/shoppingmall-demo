@@ -23,5 +23,6 @@ import { UserAuthController } from './user-auth.controller';
   ],
   controllers: [AdminAuthController, UserAuthController],
   providers: [JwtStrategy, TokenService, AdminAuthService, UserAuthService],
+  exports: [TokenService],
 })
 export class AuthModule {}

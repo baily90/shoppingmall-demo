@@ -26,7 +26,7 @@ model FaqDocument {
 // 客服会话（对话元数据）
 model ChatSession {
   id        String   @id @default(uuid())
-  userId    String?  @map("user_id")
+  userId    String   @map("user_id")
   title     String?
   status    String   @default("active")
   createdAt DateTime @default(now()) @map("created_at")
