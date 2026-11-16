@@ -11,6 +11,7 @@ import { getErrorMessage } from '../api/request';
 import CategoryBar from '../components/CategoryBar';
 import ProductCard from '../components/ProductCard';
 import BottomTabBar from '../components/TabBar';
+import Img from '../components/Img';
 
 const PAGE_SIZE = 10;
 
@@ -28,6 +29,7 @@ export default function Home() {
 
   const [banners, setBanners] = useState<HomeSlot[]>([]);
   const [navIcons, setNavIcons] = useState<HomeSlot[]>([]);
+  const [bannersLoading, setBannersLoading] = useState(true);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [products, setProducts] = useState<StoreProductRow[]>([]);
@@ -71,7 +73,8 @@ export default function Home() {
         setBanners(r.data.data.banners);
         setNavIcons(r.data.data.navIcons);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setBannersLoading(false));
   }, []);
 
   useEffect(() => {
@@ -152,7 +155,11 @@ export default function Home() {
         </div>
       </header>
 
-      {banners.length > 0 && (
+      {bannersLoading ? (
+        <div className="home-banner">
+          <div className="skeleton skeleton-banner" />
+        </div>
+      ) : banners.length > 0 ? (
         <motion.div
           className="home-banner"
           initial={{ opacity: 0, y: 16 }}
@@ -162,14 +169,27 @@ export default function Home() {
           <Swiper autoplay loop>
             {banners.map((b) => (
               <Swiper.Item key={b.id} onClick={() => handleLink(b.linkType, b.linkValue)}>
-                <img className="home-banner-img" src={b.image} alt={b.name} />
+                <Img className="home-banner-img" src={b.image} alt={b.name} />
               </Swiper.Item>
             ))}
           </Swiper>
         </motion.div>
+      ) : (
+        <div className="home-banner">
+          <Img className="home-banner-img" src={null} alt="banner 占位" />
+        </div>
       )}
 
-      {navIcons.length > 0 && (
+      {bannersLoading ? (
+        <div className="skeleton-nav">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="skeleton-nav-item">
+              <div className="skeleton" />
+              <div className="skeleton skeleton-line" />
+            </div>
+          ))}
+        </div>
+      ) : navIcons.length > 0 ? (
         <nav className="home-nav">
           {navIcons.map((n, i) => (
             <motion.div
@@ -181,12 +201,12 @@ export default function Home() {
               whileTap={{ scale: 0.94 }}
               onClick={() => handleLink(n.linkType, n.linkValue)}
             >
-              <img className="nav-icon-img" src={n.image} alt={n.name} />
+              <Img className="nav-icon-img" src={n.image} alt={n.name} />
               <span className="nav-icon-name">{n.name}</span>
             </motion.div>
           ))}
         </nav>
-      )}
+      ) : null}
 
       <div className="home-entries">
         <motion.div
@@ -248,7 +268,20 @@ export default function Home() {
         </div>
       )}
 
-      {products.length === 0 && !loading ? (
+      {loading && products.length === 0 ? (
+        <div className="product-grid">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="product-card">
+              <div className="skeleton skeleton-card-img" />
+              <div className="product-card-body">
+                <div className="skeleton skeleton-line" />
+                <div className="skeleton skeleton-line short" style={{ marginTop: 8 }} />
+                <div className="skeleton skeleton-line" style={{ marginTop: 12, width: '50%' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : products.length === 0 ? (
         <div className="empty">暂无商品</div>
       ) : (
         <div className="product-grid">
@@ -257,7 +290,7 @@ export default function Home() {
           ))}
         </div>
       )}
-      {loading && <div className="empty">加载中…</div>}
+      {loading && products.length > 0 && <div className="empty">加载中…</div>}
       {!loading && hasMore && (
         <div className="more" onClick={() => void loadMore()}>
           加载更多

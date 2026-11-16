@@ -34,6 +34,26 @@ export class ListProductDto extends PageQueryDto {
   @IsInt({ message: '状态必须为整数' })
   @IsIn([0, 1], { message: '状态只能为 0 或 1' })
   status?: number;
+
+  @ApiPropertyOptional({ description: '品牌名（模糊匹配，如「华为」）' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30, { message: '品牌名最多 30 字' })
+  brand?: string;
+
+  @ApiPropertyOptional({ description: '最低价格（分）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '最低价格必须为整数（分）' })
+  @Min(0, { message: '最低价格不能为负' })
+  priceMin?: number;
+
+  @ApiPropertyOptional({ description: '最高价格（分）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '最高价格必须为整数（分）' })
+  @Min(0, { message: '最高价格不能为负' })
+  priceMax?: number;
 }
 
 /** 规格组：一个组名 + 一组规格值 */

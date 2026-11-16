@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { formatPrice } from '../utils/price';
 import type { StoreProductRow } from '../api/store';
+import Img from './Img';
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
@@ -18,7 +19,7 @@ export default function ProductCard({ product }: { product: StoreProductRow }) {
       transition={{ duration: 0.45, ease: EASE }}
       whileTap={{ scale: 0.97 }}
     >
-      <img className="product-card-img" src={product.mainImage} alt={product.name} />
+      <Img className="product-card-img" src={product.mainImage} alt={product.name} />
       <div className="product-card-body">
         <div className="product-card-name">{product.name}</div>
         {product.subTitle && <div className="product-card-sub">{product.subTitle}</div>}

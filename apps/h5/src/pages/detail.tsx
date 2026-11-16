@@ -13,6 +13,7 @@ import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
 import { useAuth } from '../store/auth';
 import { useCartCount } from '../store/cart';
+import Img from '../components/Img';
 
 export default function Detail() {
   const navigate = useNavigate();
@@ -186,14 +187,22 @@ export default function Detail() {
 
   if (!detail) {
     return (
-      <div className="page">
+      <div className="page detail-page">
         <header className="detail-header">
           <button className="detail-back" onClick={() => navigate(-1)} aria-label="返回">
             <ChevronLeft size={22} strokeWidth={2.25} />
           </button>
           <div className="detail-header-title">商品详情</div>
         </header>
-        <div className="empty">加载中…</div>
+        <div className="skeleton skeleton-detail-img" />
+        <div className="skeleton-detail-block">
+          <div className="skeleton skeleton-price" />
+          <div className="skeleton skeleton-line" style={{ marginTop: 16 }} />
+          <div className="skeleton skeleton-line short" style={{ marginTop: 10 }} />
+          <div className="skeleton skeleton-title" style={{ marginTop: 24 }} />
+          <div className="skeleton skeleton-line" style={{ marginTop: 10 }} />
+          <div className="skeleton skeleton-line short" style={{ marginTop: 10 }} />
+        </div>
       </div>
     );
   }
@@ -207,14 +216,16 @@ export default function Detail() {
         <div className="detail-header-title">商品详情</div>
       </header>
 
-      {images.length > 0 && (
+      {images.length > 0 ? (
         <Swiper>
           {images.map((url) => (
             <Swiper.Item key={url}>
-              <img className="detail-img" src={url} alt="" />
+              <Img className="detail-img" src={url} alt="" />
             </Swiper.Item>
           ))}
         </Swiper>
+      ) : (
+        <Img className="detail-img" src={null} alt="商品图占位" />
       )}
 
       <div className="detail-body">
@@ -319,7 +330,7 @@ export default function Detail() {
             {r.images.length > 0 && (
               <div className="review-images">
                 {r.images.map((url, idx) => (
-                  <img key={idx} src={url} alt="" className="review-image" />
+                  <Img key={idx} src={url} alt="" className="review-image" />
                 ))}
               </div>
             )}

@@ -68,17 +68,44 @@ export class ProductService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const keyword = query.keyword?.trim();
+    const brand = query.brand?.trim();
     // 按父分类查时，同时命中其全部后代分类下的商品
     const categoryIds =
       query.categoryId !== undefined
         ? await this.categoryService.getDescendantIds(query.categoryId)
         : undefined;
+    // 价格区间（分）：按「最便宜的在售 SKU 落在区间内」过滤
+    const priceFilter =
+      query.priceMin !== undefined || query.priceMax !== undefined
+        ? {
+            skus: {
+              some: {
+                status: 1,
+                price: {
+                  ...(query.priceMin !== undefined ? { gte: query.priceMin } : {}),
+                  ...(query.priceMax !== undefined ? { lte: query.priceMax } : {}),
+                },
+              },
+            },
+          }
+        : {};
     const where: Prisma.ProductWhereInput = {
       deletedAt: null,
       status: 1,
-      ...(keyword ? { name: { contains: keyword, mode: 'insensitive' } } : {}),
+      // 关键词同时匹配商品名 / 副标题 / 分类名，购物场景下「电脑」能命中「电脑」分类下的商品
+      ...(keyword
+        ? {
+            OR: [
+              { name: { contains: keyword, mode: 'insensitive' } },
+              { subTitle: { contains: keyword, mode: 'insensitive' } },
+              { category: { name: { contains: keyword, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+      ...(brand ? { brand: { name: { contains: brand, mode: 'insensitive' } } } : {}),
       ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
       ...(query.brandId !== undefined ? { brandId: query.brandId } : {}),
+      ...priceFilter,
     };
 
     const [list, total] = await Promise.all([
@@ -91,6 +118,7 @@ export class ProductService {
           mainImage: true,
           reviewCount: true,
           ratingSum: true,
+          brand: { select: { name: true } },
           skus: {
             where: { status: 1 },
             orderBy: { price: 'asc' },
@@ -113,6 +141,7 @@ export class ProductService {
         mainImage: this.storage.toPublicUrl(p.mainImage),
         price: p.skus[0]?.price ?? null,
         originalPrice: p.skus[0]?.originalPrice ?? null,
+        brandName: p.brand?.name ?? null,
         reviewCount: p.reviewCount,
         ratingAvg: this.ratingAvg(p.reviewCount, p.ratingSum),
       })),

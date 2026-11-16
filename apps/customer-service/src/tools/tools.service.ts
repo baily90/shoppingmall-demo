@@ -56,6 +56,7 @@ interface ProductListItem {
   subTitle: string | null;
   price: number | null;
   originalPrice: number | null;
+  brandName: string | null;
   reviewCount: number;
   ratingAvg: number;
 }
@@ -89,11 +90,24 @@ export class ToolsService {
     return { found: true, orders: matched };
   }
 
-  // 查商品：调 mall-server GET /api/products?keyword=商品名（公开接口）
-  async getProduct(keyword: string) {
-    const res = await fetch(
-      `${this.baseUrl}/products?keyword=${encodeURIComponent(keyword)}&page=1&pageSize=10`,
-    );
+  // 检索/筛选商品：调 mall-server GET /api/products（支持关键词/品牌/价格区间，公开接口）
+  async getProducts(args: {
+    keyword?: string;
+    brand?: string;
+    priceMin?: number;
+    priceMax?: number;
+    limit?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (args.keyword) params.set('keyword', args.keyword);
+    if (args.brand) params.set('brand', args.brand);
+    // 价格：模型给「元」，接口要「分」
+    if (args.priceMin != null) params.set('priceMin', String(Math.round(args.priceMin * 100)));
+    if (args.priceMax != null) params.set('priceMax', String(Math.round(args.priceMax * 100)));
+    params.set('page', '1');
+    params.set('pageSize', String(args.limit ?? 5));
+
+    const res = await fetch(`${this.baseUrl}/products?${params.toString()}`);
     const body = (await res.json()) as { code: number; data: unknown; message: string };
     if (body.code !== 0) return { error: body.message };
 
@@ -129,11 +143,12 @@ export class ToolsService {
     };
   }
 
-  // 商品瘦身：只留名称/副标题/价格/评分，图片 URL 对模型无用
+  // 商品瘦身：留名称/品牌/副标题/价格/评分，图片 URL 对模型无用
   private slimProduct(p: ProductListItem) {
     return {
       id: p.id,
       name: p.name,
+      brand: p.brandName,
       subTitle: p.subTitle,
       price: p.price == null ? null : formatMoney(p.price),
       originalPrice: p.originalPrice == null ? null : formatMoney(p.originalPrice),
