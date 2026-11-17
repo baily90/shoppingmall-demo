@@ -90,6 +90,24 @@ function formatMoney(fen: number): string {
   return `¥${(fen / 100).toFixed(2).replace(/\.00$/, '')}`;
 }
 
+// 带超时 + 退避重试的 fetch：网络抖动/超时自动重试，成功返回解析后的 JSON。
+// 只重试「网络层」失败（fetch 抛错 / 超时）；HTTP 有响应就交给调用方按 code 判断。
+async function fetchJson(url: string, init: RequestInit = {}, retries = 2): Promise<unknown> {
+  let lastErr: unknown;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(8000) });
+      return await res.json();
+    } catch (e) {
+      lastErr = e;
+      if (i < retries) {
+        await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 // ==================== db_query：只读查库（自然语言 → SQL） ====================
 // 只允许查询公共业务表（商品/分类/品牌/评价/营销），排除用户订单、admin、会员等敏感数据。
 // 用户个人数据（订单等）走 getOrders 工具（带用户鉴权），不走 db_query。
@@ -144,7 +162,7 @@ export class ToolsService {
   // 只读查库：执行白名单校验后的 SELECT，返回结果集（最多 50 行），供模型总结回答
   async dbQuery(sql: string) {
     const error = validateReadQuery(sql);
-    if (error) return { error };
+    if (error) return { error, hint: '换个查询方式或改用 getProducts/getOrders 等工具' };
 
     try {
       const rows = (await this.prisma.$queryRawUnsafe(sql)) as unknown as Array<
@@ -154,7 +172,10 @@ export class ToolsService {
       const columns = list.length > 0 ? Object.keys(list[0]) : [];
       return { columns, rows: list, rowCount: list.length };
     } catch (e) {
-      return { error: `查询失败：${e instanceof Error ? e.message : e}` };
+      return {
+        error: `查询失败：${e instanceof Error ? e.message : e}`,
+        hint: '简化 SQL 或换个查询条件重试',
+      };
     }
   }
 
@@ -166,11 +187,15 @@ export class ToolsService {
     params.set('pageSize', '50');
     if (args.status != null) params.set('status', String(args.status));
 
-    const res = await fetch(`${this.baseUrl}/orders?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const body = (await res.json()) as { code: number; data: unknown; message: string };
-    if (body.code !== 0) return { error: body.message };
+    let body: { code: number; data: unknown; message: string };
+    try {
+      body = (await fetchJson(`${this.baseUrl}/orders?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })) as typeof body;
+    } catch {
+      return { error: '查询订单失败', hint: '稍后重试', orders: [] };
+    }
+    if (body.code !== 0) return { error: body.message, orders: [] };
 
     let list = (body.data as { list?: OrderListItem[] } | null)?.list ?? [];
     // 订单号接口不支持过滤，本地按 orderNo 子串匹配
@@ -178,7 +203,18 @@ export class ToolsService {
       list = list.filter((o) => String(o.orderNo ?? '').includes(args.orderNo!));
     }
 
-    return { total: list.length, orders: list.map((o) => this.slimOrder(o)) };
+    const orders = list.map((o) => this.slimOrder(o));
+    if (orders.length === 0) {
+      return {
+        empty: true,
+        total: 0,
+        orders,
+        hint: args.orderNo
+          ? `没有找到订单号含「${args.orderNo}」的订单，可换订单号或让用户用「我的订单」看全部`
+          : '你还没有订单',
+      };
+    }
+    return { total: orders.length, orders };
   }
 
   // 检索/筛选商品：调 mall-server GET /api/products（支持关键词/品牌/价格区间，公开接口）
@@ -198,15 +234,28 @@ export class ToolsService {
     params.set('page', '1');
     params.set('pageSize', String(args.limit ?? 5));
 
-    const res = await fetch(`${this.baseUrl}/products?${params.toString()}`);
-    const body = (await res.json()) as { code: number; data: unknown; message: string };
-    if (body.code !== 0) return { error: body.message };
+    let body: { code: number; data: unknown; message: string };
+    try {
+      body = (await fetchJson(`${this.baseUrl}/products?${params.toString()}`)) as typeof body;
+    } catch {
+      return { error: '查询商品失败', hint: '稍后重试', products: [] };
+    }
+    if (body.code !== 0) return { error: body.message, products: [] };
 
     const data = body.data as { list?: ProductListItem[]; total?: number } | null;
     const list = data?.list ?? [];
+    const products = list.map((p) => this.slimProduct(p));
+    if (products.length === 0) {
+      return {
+        empty: true,
+        total: 0,
+        products,
+        hint: '没有符合条件的商品，可放宽关键词/品牌/价格区间后再查一次',
+      };
+    }
     return {
-      total: data?.total ?? list.length,
-      products: list.map((p) => this.slimProduct(p)),
+      total: data?.total ?? products.length,
+      products,
     };
   }
 
@@ -240,23 +289,33 @@ export class ToolsService {
 
   // 查收货地址：调 mall-server GET /api/addresses（需要用户 token）
   async getAddresses(token: string) {
-    const res = await fetch(`${this.baseUrl}/addresses`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const body = (await res.json()) as { code: number; data: unknown; message: string };
-    if (body.code !== 0) return { error: body.message };
+    let body: { code: number; data: unknown; message: string };
+    try {
+      body = (await fetchJson(`${this.baseUrl}/addresses`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })) as typeof body;
+    } catch {
+      return { error: '查询地址失败', hint: '稍后重试', addresses: [] };
+    }
+    if (body.code !== 0) return { error: body.message, addresses: [] };
 
     const list = (body.data as AddressItem[] | null) ?? [];
-    return {
-      total: list.length,
-      addresses: list.map((a) => ({
-        id: a.id,
-        receiverName: a.receiverName,
-        receiverPhone: a.receiverPhone,
-        fullAddress: `${a.province}${a.city}${a.district}${a.detail}`,
-        isDefault: a.isDefault,
-      })),
-    };
+    const addresses = list.map((a) => ({
+      id: a.id,
+      receiverName: a.receiverName,
+      receiverPhone: a.receiverPhone,
+      fullAddress: `${a.province}${a.city}${a.district}${a.detail}`,
+      isDefault: a.isDefault,
+    }));
+    if (addresses.length === 0) {
+      return {
+        empty: true,
+        total: 0,
+        addresses,
+        hint: '用户还没有收货地址，引导其先去「地址管理」添加地址',
+      };
+    }
+    return { total: addresses.length, addresses };
   }
 
   // 生成订单草稿（不真正下单）：组装结构化草稿，前端渲染确认卡片，用户确认后才由前端真正下单。

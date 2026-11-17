@@ -39,6 +39,10 @@ const SYSTEM_PROMPT = `你是「商城购物助手」，像一位耐心的导购
 ## 页面跳转
 需要用户去某页面操作时（改地址、管理订单、看购物车/优惠券/收藏、秒杀等），调用 navigateTo 生成可点击的跳转入口卡片，不要只给一句「请去 XX 页面」的文字。
 
+## 容错与降级（重要）
+工具返回 empty 时：按返回的 hint 建议放宽条件（放宽价格/关键词/品牌）再查一次；放宽后仍为空，如实告诉用户「没找到符合条件的」，绝不编造。
+工具返回 error 时：按 hint 建议降级——稍后重试 / 换工具 / 引导用户换方式；不要在同一失败操作上反复重试。
+
 ## 其他场景
 - 退款/退货/物流/优惠券等政策类问题：先调 getFaq 查知识库，严格基于检索结果回答。
 - 查订单：调 getOrders。用户问「我的订单有哪些/订单列表」时不传参列出全部；问某个订单传 orderNo；按状态筛选传 status。
@@ -89,7 +93,13 @@ export class ChatService {
       getFaq: tool({
         description: '检索退款/退货/物流/优惠券等售后政策知识库。用户问规则类问题时使用。',
         inputSchema: z.object({ question: z.string().describe('要检索的问题') }),
-        execute: async ({ question }) => this.ragService.search(question),
+        execute: async ({ question }) => {
+          const hits = await this.ragService.search(question);
+          if (hits.length === 0) {
+            return { empty: true, hits, hint: '知识库里没有相关答案，诚实告知并引导转人工' };
+          }
+          return { hits };
+        },
       }),
       db_query: tool({
         description:
