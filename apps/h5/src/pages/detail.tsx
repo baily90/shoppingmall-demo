@@ -14,6 +14,7 @@ import { formatPrice } from '../utils/price';
 import { useAuth } from '../store/auth';
 import { useCartCount } from '../store/cart';
 import Img from '../components/Img';
+import { goBuyNow } from '../utils/buy';
 
 export default function Detail() {
   const navigate = useNavigate();
@@ -166,20 +167,16 @@ export default function Detail() {
     const sku = ensureReady();
     if (!sku || !detail) return;
     const specText = sku.specValues.map((v) => `${v.groupName}:${v.value}`).join(' / ');
-    navigate('/checkout', {
-      state: {
-        items: [
-          {
-            skuId: sku.id,
-            quantity,
-            name: detail.name,
-            image: sku.image ?? detail.mainImage,
-            spec: specText,
-            price: sku.price,
-          },
-        ],
+    goBuyNow(navigate, [
+      {
+        skuId: sku.id,
+        quantity,
+        name: detail.name,
+        image: sku.image ?? detail.mainImage,
+        spec: specText,
+        price: sku.price,
       },
-    });
+    ]);
   };
 
   const maxQty = matchedSku?.stock ?? 99;

@@ -4,6 +4,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Inject,
@@ -77,7 +78,23 @@ export class ChatController {
     if (!session || session.userId !== req.user.userId) {
       throw new ForbiddenException('无权访问该会话');
     }
-    const messages = await this.sessionStore.listMessages(sessionId);
-    return messages.map((m) => ({ id: m.id, role: m.role, parts: m.parts }));
+    return this.sessionStore.listMessagesForUI(sessionId);
+  }
+
+  // 列出当前用户的全部会话（历史会话抽屉用）
+  @UseGuards(UserJwtGuard, UserThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Get('chat/sessions')
+  async listSessions(@Req() req: AuthedRequest) {
+    return this.sessionStore.listSessions(req.user.userId);
+  }
+
+  // 删除某个会话（仅属主）
+  @UseGuards(UserJwtGuard, UserThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Delete('chat/sessions/:id')
+  async deleteSession(@Param('id') sessionId: string, @Req() req: AuthedRequest) {
+    await this.sessionStore.deleteSession(sessionId, req.user.userId);
+    return { ok: true };
   }
 }

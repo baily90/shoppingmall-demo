@@ -8,6 +8,9 @@ import type { EmbeddingModel, LanguageModel } from 'ai';
 // DeepSeek 聊天模型
 export const chatModel: LanguageModel = deepseek('deepseek-chat');
 
+// 摘要压缩模型（可独立替换为更快/更省的模型，当前与 chatModel 同款）
+export const compressModel: LanguageModel = deepseek('deepseek-chat');
+
 // 硅基流动（SiliconFlow）OpenAI 兼容接口：embedding 走它
 const siliconflow = createOpenAICompatible({
   name: 'siliconflow',

@@ -1695,3 +1695,499 @@ body {
   width: 82%;
   height: 20px;
 }
+
+/* ==================== 聊天商品卡片 ==================== */
+.chat-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.chat-product-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--c-surface);
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+}
+.chat-product-img {
+  width: 68px;
+  height: 68px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--c-surface-2);
+  flex: 0 0 auto;
+}
+.chat-product-info {
+  flex: 1;
+  min-width: 0;
+}
+.chat-product-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--c-text);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.chat-product-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+.chat-product-brand {
+  font-size: 11px;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+.chat-product-rating {
+  font-size: 11px;
+  color: var(--c-text-3);
+}
+.chat-product-price {
+  margin-top: 5px;
+  font-size: 16px;
+}
+.chat-product-buy {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--c-accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.chat-product-buy:active {
+  opacity: 0.85;
+}
+
+/* ==================== 聊天订单卡片 ==================== */
+.chat-order-card {
+  background: var(--c-surface);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.chat-order-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+.chat-order-status {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+.chat-order-status.s10 {
+  color: #b45309;
+  background: #fef3c7;
+}
+.chat-order-status.s20 {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+.chat-order-status.s30 {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+.chat-order-status.s40 {
+  color: #15803d;
+  background: #dcfce7;
+}
+.chat-order-status.s50,
+.chat-order-status.s60 {
+  color: var(--c-text-3);
+  background: var(--c-surface-2);
+}
+.chat-order-no {
+  font-size: 11px;
+  color: var(--c-text-3);
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-order-body {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.chat-order-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--c-surface-2);
+  flex: 0 0 auto;
+}
+.chat-order-info {
+  flex: 1;
+  min-width: 0;
+}
+.chat-order-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-text);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-order-meta {
+  font-size: 11px;
+  color: var(--c-text-3);
+  margin-top: 2px;
+}
+.chat-order-price {
+  margin-top: 4px;
+  font-size: 15px;
+}
+.chat-order-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+.chat-order-btn {
+  height: 30px;
+  padding: 0 13px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-pill);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-order-btn.primary {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.chat-order-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================== 聊天订单草稿确认卡片 ==================== */
+.chat-order-draft {
+  background: var(--c-surface);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: var(--shadow-card);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+.chat-draft-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+  margin-bottom: 10px;
+}
+.chat-draft-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.chat-draft-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--c-surface-2);
+  flex: 0 0 auto;
+}
+.chat-draft-info {
+  flex: 1;
+  min-width: 0;
+}
+.chat-draft-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-text);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-draft-price {
+  font-size: 12px;
+  color: var(--c-text-2);
+  margin-top: 2px;
+}
+.chat-draft-addr {
+  font-size: 12px;
+  color: var(--c-text-2);
+  line-height: 1.5;
+  padding: 8px 10px;
+  background: var(--c-surface-2);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+.chat-draft-addr-label {
+  color: var(--c-text-3);
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.chat-draft-total {
+  font-size: 13px;
+  color: var(--c-text);
+  text-align: right;
+  margin-bottom: 10px;
+}
+.chat-draft-confirm {
+  width: 100%;
+  height: 38px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--c-accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.chat-draft-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.chat-draft-placed {
+  text-align: center;
+  font-size: 14px;
+  color: var(--adm-color-success);
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+/* ==================== 聊天跳转入口卡片 ==================== */
+.chat-nav-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border-soft);
+  border-radius: 14px;
+  background: var(--c-surface);
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+}
+.chat-nav-entry-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-accent);
+  flex: 0 0 auto;
+}
+.chat-nav-entry-desc {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--c-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-nav-entry-arrow {
+  font-size: 18px;
+  color: var(--c-text-3);
+  flex: 0 0 auto;
+}
+
+/* ==================== 聊天 Markdown 渲染 ==================== */
+.chat-markdown {
+  font-size: inherit;
+  line-height: 1.55;
+  word-break: break-word;
+}
+.chat-markdown > :first-child {
+  margin-top: 0;
+}
+.chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+.chat-markdown p {
+  margin: 0 0 6px;
+}
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+.chat-markdown li {
+  margin: 2px 0;
+}
+.chat-markdown code {
+  background: var(--c-surface-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+}
+.chat-markdown pre {
+  background: var(--c-surface-2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  margin: 0 0 6px;
+}
+.chat-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.chat-markdown table {
+  border-collapse: collapse;
+  margin: 0 0 6px;
+  font-size: 13px;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.chat-markdown th,
+.chat-markdown td {
+  border: 1px solid var(--c-border-soft);
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.chat-markdown th {
+  background: var(--c-surface-2);
+  font-weight: 600;
+}
+.chat-markdown a {
+  color: var(--c-accent);
+}
+.chat-markdown blockquote {
+  margin: 0 0 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--c-border);
+  color: var(--c-text-2);
+}
+
+/* ==================== 历史会话抽屉 ==================== */
+.chat-nav-actions {
+  display: flex;
+  gap: 12px;
+}
+.chat-nav-btn {
+  border: none;
+  background: none;
+  color: var(--c-accent);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+}
+.session-drawer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-bg);
+}
+.session-drawer-head {
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--c-text);
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--c-surface);
+  margin-bottom: 8px;
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+}
+.session-item.active {
+  border: 1px solid var(--c-accent);
+}
+.session-item-main {
+  flex: 1;
+  min-width: 0;
+}
+.session-item-title {
+  font-size: 14px;
+  color: var(--c-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-item-time {
+  font-size: 11px;
+  color: var(--c-text-3);
+  margin-top: 3px;
+}
+.session-item-del {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  color: var(--c-text-3);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px;
+}
+.session-empty {
+  text-align: center;
+  color: var(--c-text-3);
+  padding: 40px 0;
+  font-size: 14px;
+}
+
+/* ==================== 聊天思考过程（reasoning） ==================== */
+.chat-reasoning {
+  background: var(--c-surface-2);
+  border-radius: 12px;
+  padding: 8px 12px;
+  max-width: 78%;
+}
+.chat-reasoning summary {
+  font-size: 12px;
+  color: var(--c-text-2);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.chat-reasoning summary::-webkit-details-marker {
+  display: none;
+}
+.chat-reasoning-text {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--c-text-2);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px dashed var(--c-border-soft);
+  padding-top: 6px;
+}

@@ -9,7 +9,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { generateText, Output, type ModelMessage } from 'ai';
 import { z } from 'zod';
-import { chatModel } from '../llm/llm.service.js';
+import { compressModel } from '../llm/llm.service.js';
 import { SessionStore } from '../session/session-store.js';
 import { estimateJsonTokens, estimateTokens } from './token.js';
 
@@ -110,7 +110,7 @@ export class ContextService {
 
     // 调 LLM：一次调用同时产出滚动摘要 + 关键事实槽位
     const result = await generateText({
-      model: chatModel,
+      model: compressModel,
       output: Output.object({
         schema: z.object({
           summary: z.string().describe('合并旧摘要与新对话的滚动摘要'),

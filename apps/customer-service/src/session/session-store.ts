@@ -25,6 +25,19 @@ export interface UpdateStateInput {
   expectedUpToSeq: number; // 乐观锁：推进前的水位线，不匹配则 CAS 失败
 }
 
+// 从 parts（JSON）里提取第一段纯文本（用于会话标题）
+function extractFirstText(parts: unknown): string {
+  const list = Array.isArray(parts) ? parts : [];
+  for (const p of list) {
+    const part = p as { type?: string; text?: string };
+    if (part.type === 'text' && part.text) {
+      const t = part.text.trim();
+      return t.length > 30 ? `${t.slice(0, 30)}…` : t;
+    }
+  }
+  return '';
+}
+
 @Injectable()
 export class SessionStore {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
@@ -32,6 +45,36 @@ export class SessionStore {
   // —— 会话 ——
   async getSession(sessionId: string) {
     return this.prisma.chatSession.findUnique({ where: { id: sessionId } });
+  }
+
+  // 列出当前用户的所有会话（标题取首条用户消息，按更新时间倒序）
+  async listSessions(userId: string) {
+    const sessions = await this.prisma.chatSession.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        messages: {
+          where: { role: 'user' },
+          orderBy: { seq: 'asc' },
+          take: 1,
+          select: { parts: true },
+        },
+      },
+    });
+    return sessions.map((s) => ({
+      id: s.id,
+      title: s.title ?? (extractFirstText(s.messages[0]?.parts) || '新会话'),
+      updatedAt: s.updatedAt,
+    }));
+  }
+
+  // 删除会话（仅属主），消息/状态随外键级联删除
+  async deleteSession(sessionId: string, userId: string) {
+    const existing = await this.prisma.chatSession.findUnique({ where: { id: sessionId } });
+    if (!existing || existing.userId !== userId) {
+      throw new ForbiddenException('无权访问该会话');
+    }
+    await this.prisma.chatSession.delete({ where: { id: sessionId } });
   }
 
   // —— 消息（append-only）——
@@ -65,6 +108,53 @@ export class SessionStore {
       where: { sessionId },
       orderBy: { seq: 'asc' },
     });
+  }
+
+  // hydration（给前端）：把 tool-result 合并回 assistant 的 tool-call，转成 UIMessage 结构。
+  // 存储层仍是 ModelMessage 结构（上下文组装要用），此处只做「读侧投影」，
+  // 让前端能据此渲染文本气泡 + 商品/订单卡片（工具输出随历史一起回填，刷新不丢）。
+  async listMessagesForUI(sessionId: string) {
+    const rows = await this.listMessages(sessionId);
+
+    // tool-result 按 toolCallId 索引（tool 消息存的是 ModelMessage 的 tool-result content）
+    const toolOutputs = new Map<string, unknown>();
+    for (const m of rows) {
+      if (m.role !== 'tool') continue;
+      const parts = m.parts as unknown as Array<{
+        type?: string;
+        toolCallId?: string;
+        output?: unknown;
+      }>;
+      for (const p of parts) {
+        if (p.type === 'tool-result' && p.toolCallId) toolOutputs.set(p.toolCallId, p.output);
+      }
+    }
+
+    return rows
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => {
+        if (m.role !== 'assistant') return { id: m.id, role: m.role, parts: m.parts };
+        const parts = (m.parts as unknown as Array<Record<string, unknown>>).map((p) => {
+          if (p.type === 'tool-call') {
+            const raw = toolOutputs.get(String(p.toolCallId));
+            // 存储层 tool-result 的 output 是 DataContent 信封 { type: 'json', value: ... }，解包成裸值
+            const output =
+              raw && typeof raw === 'object' && 'value' in (raw as object)
+                ? (raw as { value: unknown }).value
+                : raw;
+            return {
+              type: 'dynamic-tool',
+              toolName: p.toolName,
+              toolCallId: p.toolCallId,
+              input: p.input,
+              output,
+              state: 'output-available',
+            };
+          }
+          return p;
+        });
+        return { id: m.id, role: m.role, parts };
+      });
   }
 
   // 懒重建窗口：只取 seq > afterSeq 的原文（afterSeq = summary_up_to_seq）

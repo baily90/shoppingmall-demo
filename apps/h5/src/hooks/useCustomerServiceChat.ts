@@ -30,10 +30,10 @@ function getOrCreateSessionId(): string {
 
 /**
  * 智能客服对话：封装 useChat（AI SDK v7）+ 服务端历史 hydration。
- * 会话 id 稳定不变（组件重挂载/刷新都指向同一条服务端会话）。
+ * 会话 id 可切换（新会话/历史会话），切换后重新拉取对应历史。
  */
 export function useCustomerServiceChat() {
-  const [sessionId] = useState(() => getOrCreateSessionId());
+  const [sessionId, setSessionId] = useState(() => getOrCreateSessionId());
 
   const { messages, sendMessage, status, error, stop, setMessages } = useChat({
     id: sessionId,
@@ -54,7 +54,7 @@ export function useCustomerServiceChat() {
 
   const loading = status === 'submitted' || status === 'streaming';
 
-  // 挂载时 hydration：拉取服务端历史回填（刷新后能看到之前的对话）
+  // sessionId 变化时 hydration：拉取该会话的服务端历史回填
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -86,5 +86,20 @@ export function useCustomerServiceChat() {
     };
   }, [sessionId, setMessages]);
 
-  return { messages, sendMessage, loading, error, stop };
+  // 新会话：生成新 id + 清空消息
+  const resetSession = () => {
+    const newId = crypto.randomUUID();
+    localStorage.setItem(SESSION_KEY, newId);
+    setMessages([]);
+    setSessionId(newId);
+  };
+
+  // 切换到某个历史会话
+  const switchSession = (id: string) => {
+    localStorage.setItem(SESSION_KEY, id);
+    setMessages([]);
+    setSessionId(id);
+  };
+
+  return { messages, sessionId, sendMessage, loading, error, stop, resetSession, switchSession };
 }
