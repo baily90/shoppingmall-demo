@@ -35,8 +35,12 @@ type PartLike = {
 export class ContextService {
   constructor(@Inject(SessionStore) private readonly sessionStore: SessionStore) {}
 
-  async assemble(input: { sessionId: string; systemPrompt: string }): Promise<AssembledContext> {
-    const { sessionId, systemPrompt } = input;
+  async assemble(input: {
+    sessionId: string;
+    systemPrompt: string;
+    userFacts?: string[];
+  }): Promise<AssembledContext> {
+    const { sessionId, systemPrompt, userFacts = [] } = input;
     const state = await this.sessionStore.getState(sessionId);
     const summaryUpToSeq = state?.summaryUpToSeq ?? 0;
 
@@ -74,6 +78,7 @@ export class ContextService {
     // ④ 组装：摘要管背景、槽位管事实、窗口管当下
     const instructions = [
       systemPrompt,
+      userFacts.length > 0 ? `【用户画像】${userFacts.join('；')}` : '',
       summary ? `【历史摘要】${summary}` : '',
       slots ? `【关键事实】${JSON.stringify(slots)}` : '',
     ]

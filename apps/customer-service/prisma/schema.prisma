@@ -66,3 +66,12 @@ model ChatSessionState {
 
   @@map("chat_session_states")
 }
+
+// 用户画像（跨会话长期记忆）：存用户偏好/预算/用途等自然语言事实，按 userId 维度
+model UserProfile {
+  userId    String   @id @map("user_id")
+  facts     Json     @default("[]") @map("facts")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_profiles")
+}
