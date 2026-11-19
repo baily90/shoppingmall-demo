@@ -75,3 +75,14 @@ model UserProfile {
 
   @@map("user_profiles")
 }
+
+// 语义缓存：FAQ 问答缓存（问题向量 + 答案），命中则不调 LLM
+model QaCache {
+  id        Int                      @id @default(autoincrement())
+  question  String
+  answer    String
+  embedding Unsupported("public.vector(1024)")?
+  createdAt DateTime                 @default(now()) @map("created_at")
+
+  @@map("qa_cache")
+}

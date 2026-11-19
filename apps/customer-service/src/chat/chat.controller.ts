@@ -68,6 +68,13 @@ export class ChatController {
     } catch (err) {
       console.error('❌ 落库 assistant/tool 消息失败：', err);
     }
+
+    // 语义缓存：政策类回答写缓存（失败不影响主流程）
+    try {
+      await this.chatService.cacheResponse(text, result);
+    } catch (err) {
+      console.error('❌ 语义缓存写入失败：', err);
+    }
   }
 
   @UseGuards(UserJwtGuard, UserThrottlerGuard)

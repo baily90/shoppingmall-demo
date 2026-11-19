@@ -5,8 +5,11 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { RerankingModelV4 } from '@ai-sdk/provider';
 import type { EmbeddingModel, LanguageModel } from 'ai';
 
-// DeepSeek 聊天模型
+// DeepSeek 聊天模型（默认，便宜、工具调用稳）
 export const chatModel: LanguageModel = deepseek('deepseek-chat');
+
+// 强推理模型（意图路由：下单/多步规划等复杂任务用，带原生思维链）
+export const reasonerModel: LanguageModel = deepseek('deepseek-reasoner');
 
 // 摘要压缩模型（可独立替换为更快/更省的模型，当前与 chatModel 同款）
 export const compressModel: LanguageModel = deepseek('deepseek-chat');

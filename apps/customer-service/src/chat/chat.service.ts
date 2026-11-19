@@ -5,11 +5,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { isStepCount, streamText, tool } from 'ai';
 import { z } from 'zod';
-import { chatModel } from '../llm/llm.service.js';
+import { chatModel, reasonerModel } from '../llm/llm.service.js';
 import { ToolsService } from '../tools/tools.service.js';
 import { RagService } from '../rag/rag.service.js';
 import { SessionStore } from '../session/session-store.js';
 import { UserProfileStore } from '../session/user-profile-store.js';
+import { QaCacheStore } from '../session/qa-cache-store.js';
 import { ContextService } from './context.service.js';
 import { estimateJsonTokens, estimateTokens } from './token.js';
 
@@ -23,6 +24,13 @@ const INJECTION_PATTERNS = [
 
 function detectInjection(text: string): boolean {
   return INJECTION_PATTERNS.some((p) => p.test(text));
+}
+
+// 意图路由：需要多步推理/规划的任务用强推理模型，其余用便宜模型（规则路由，可后续换分类器）
+const COMPLEX_INTENT = /(下单|购买|结算|帮我买|帮我下单|对比|哪个好|帮我挑|帮我选)/;
+
+function routeModel(text: string) {
+  return COMPLEX_INTENT.test(text) ? reasonerModel : chatModel;
 }
 
 const SYSTEM_PROMPT = `你是「商城购物助手」，像一位耐心的导购，覆盖用户从选购、下单到售后的全链路。始终只用中文回复，不要夹杂任何英文。
@@ -84,6 +92,7 @@ export class ChatService {
     @Inject(SessionStore) private readonly sessionStore: SessionStore,
     @Inject(ContextService) private readonly contextService: ContextService,
     @Inject(UserProfileStore) private readonly userProfileStore: UserProfileStore,
+    @Inject(QaCacheStore) private readonly qaCacheStore: QaCacheStore,
   ) {}
 
   // 每次对话按用户 token 动态创建工具集（查订单/记画像需要用户身份）
@@ -216,6 +225,12 @@ export class ChatService {
       return this.refusalResponse();
     }
 
+    // ②.6 语义缓存：命中则直接返回缓存答案，不跑 agent（省 RAG + 工具循环 + 模型推理）
+    const cached = await this.qaCacheStore.findAnswer(userText);
+    if (cached) {
+      return this.cachedResponse(cached);
+    }
+
     // ③ 组装上下文（懒重建窗口 + token 预算裁剪 + 滚动摘要 + 用户画像）
     const userFacts = await this.userProfileStore.getFacts(userId);
     const { instructions, messages } = await this.contextService.assemble({
@@ -224,9 +239,9 @@ export class ChatService {
       userFacts,
     });
 
-    // ④ 流式生成（工具循环自动，结果已瘦身）
+    // ④ 流式生成（按意图路由到不同模型，工具循环自动，结果已瘦身）
     return streamText({
-      model: chatModel,
+      model: routeModel(userText),
       instructions,
       messages,
       tools: this.createTools(token, userId),
@@ -247,6 +262,40 @@ export class ChatService {
         },
       ],
     });
+  }
+
+  // 语义缓存命中：直接返回缓存答案（一次极小的 echo 调用，省去 RAG + 工具循环）
+  private cachedResponse(answer: string) {
+    return streamText({
+      model: chatModel,
+      temperature: 0,
+      messages: [
+        {
+          role: 'user',
+          content: `请原样回复以下内容，不要添加任何额外文字或解释：\n\n${answer}`,
+        },
+      ],
+    });
+  }
+
+  // 语义缓存写入：只缓存「纯政策类」回答（用了 getFaq 且没查个人数据），个性化回答不缓存
+  async cacheResponse(userText: string, result: Awaited<ReturnType<ChatService['chat']>>) {
+    // 从 responseMessages 提取工具名（result.toolCalls 在流被 toUIMessageStream 消费后为空，不可靠）
+    const responseMessages = await result.responseMessages;
+    const toolNames: string[] = [];
+    for (const msg of responseMessages) {
+      if (msg.role !== 'assistant') continue;
+      const content = Array.isArray(msg.content) ? msg.content : [];
+      for (const part of content as Array<{ type?: string; toolName?: string }>) {
+        if (part.type === 'tool-call' && part.toolName) toolNames.push(part.toolName);
+      }
+    }
+    const text = await result.text;
+    // 只缓存「纯 FAQ」回答：只调用了 getFaq、没用任何产生卡片的工具。
+    // 因为卡片不随缓存返回，若文字里引用了卡片（如「点上面的入口」）会悬空。
+    if (toolNames.length > 0 && toolNames.every((t) => t === 'getFaq')) {
+      await this.qaCacheStore.saveAnswer(userText, text);
+    }
   }
 
   // 落库 assistant/tool 消息（流结束后用 result.responseMessages 的完整结构）
