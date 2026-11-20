@@ -286,7 +286,7 @@ cd /srv/mall
 docker compose --env-file .env.prod -f docker-compose.prod.yml exec customer-service \
   sh -c "cd apps/customer-service && npx tsx prisma/seed-faq.ts"
 ```
-> seed 会调用硅基流动生成 embedding，并先 `TRUNCATE` 清空 `faq_documents` 再写入 13 条内置 FAQ（可重复跑，但会覆盖表里已有的 FAQ 内容）；确认 `SILICONFLOW_API_KEY` 已配好。
+> seed 会调用硅基流动生成 embedding，并先 `TRUNCATE` 清空 `faq_documents` 再写入 12 条内置 FAQ（可重复跑，但会覆盖表里已有的 FAQ 内容）；确认 `SILICONFLOW_API_KEY` 已配好。
 
 ### 8.3 验证
 - [ ] `docker compose ps` 所有服务 healthy/running。
