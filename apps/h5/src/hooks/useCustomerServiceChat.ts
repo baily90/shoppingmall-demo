@@ -3,6 +3,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { getAccessToken } from '../api/request';
 import { CUSTOMER_SERVICE_URL } from '../utils/customer-service-url';
+import { randomUUID } from '../utils/random-uuid';
 
 // 本地持久化的会话 id：刷新后仍用同一会话，历史从服务端 hydration 拉回
 const SESSION_KEY = 'mall_cs_session_id';
@@ -15,11 +16,11 @@ export function messageText(parts: Array<{ type: string; text?: string }>): stri
     .join('');
 }
 
-// 取 / 建会话 id（crypto.randomUUID 在 localhost / https 下均可用）
+// 取 / 建会话 id（randomUUID 已兼容非安全上下文 http://公网IP）
 function getOrCreateSessionId(): string {
   let id = localStorage.getItem(SESSION_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = randomUUID();
     localStorage.setItem(SESSION_KEY, id);
   }
   return id;
@@ -101,7 +102,7 @@ export function useCustomerServiceChat() {
   const resetSession = () => {
     stop();
     clearError();
-    const newId = crypto.randomUUID();
+    const newId = randomUUID();
     localStorage.setItem(SESSION_KEY, newId);
     setMessages([]);
     setSessionId(newId);

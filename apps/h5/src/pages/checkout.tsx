@@ -8,6 +8,7 @@ import { listMyCoupons, computeDiscount } from '../api/coupon';
 import type { MyCoupon } from '../api/coupon';
 import { getErrorMessage } from '../api/request';
 import { formatPrice } from '../utils/price';
+import { randomUUID } from '../utils/random-uuid';
 import { useCartCount } from '../store/cart';
 import CouponCard from '../components/CouponCard';
 
@@ -36,7 +37,7 @@ export default function Checkout() {
   const [selectedCouponId, setSelectedCouponId] = useState<number | undefined>();
   const [couponPopup, setCouponPopup] = useState(false);
   // 幂等键：本次结算页生成一次，重复点击「提交订单」复用同一 key，后端据此去重
-  const idempotencyKey = useRef(crypto.randomUUID()).current;
+  const idempotencyKey = useRef(randomUUID()).current;
 
   useEffect(() => {
     void (async () => {
