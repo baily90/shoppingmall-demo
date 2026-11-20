@@ -1548,6 +1548,11 @@ body {
   font-size: 13px;
   padding: 4px 2px;
 }
+.chat-error-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+}
 .chat-stop {
   border: none;
   background: none;

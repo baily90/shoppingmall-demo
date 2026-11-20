@@ -14,14 +14,15 @@
    ▼
 GitHub 代码仓库 ──► GitHub Actions（海外构建机）
                         ├─ 构建：docker build（Dockerfile 内 pnpm install + build）
-                        ├─ 打镜像：3 个镜像，tag = git SHA
-                        └─ push 到 ACR（mall-server / mall-h5 / mall-admin）
+                        ├─ 打镜像：4 个镜像，tag = git SHA
+                        └─ push 到 ACR（mall-server / mall-h5 / mall-admin / mall-customer-service）
    │
    ▼
 ECS 云服务器（Alibaba Cloud Linux 3/4）
-   ├─ nginx（h5/admin 容器内，反代 /api → server:3000）
+   ├─ nginx（h5/admin 容器内，反代 /api → server:3000、/cs → customer-service:3002）
    ├─ server 容器（NestJS :3000）
-   ├─ db 容器（PostgreSQL 16）
+   ├─ customer-service 容器（智能客服 :3002，SSE 流式）
+   ├─ db 容器（PostgreSQL 16 + pgvector 扩展）
    ├─ redis 容器（Redis 7）
    └─ minio 容器（对象存储，存图片）
 ```
@@ -179,17 +180,17 @@ git push -u origin main
 ## 6. ACR 建镜像仓库
 
 - [ ] ACR 控制台 → 命名空间 → 新建 `shopping-mall`。
-- [ ] 在 `shopping-mall` 命名空间下建 3 个仓库：`mall-server`、`mall-h5`、`mall-admin`（每个仓库=一个镜像名）。
+- [ ] 在 `shopping-mall` 命名空间下建 4 个仓库：`mall-server`、`mall-h5`、`mall-admin`、`mall-customer-service`（每个仓库=一个镜像名）。
 - [ ] ACR 个人版 → 「**设置固定密码**」，记下用户名 + 密码 → 这是流水线和 ECS `docker login` 用的 `ACR_USER` / `ACR_PASS`。
 
 ---
 
 ## 7. GitHub Actions 建流水线（workflow 文件）
 
-> 流水线就是一个 yaml 文件：`.github/workflows/deploy.yml`（仓库里已放好，push 到 GitHub 后自动生效）。它做四件事：检出代码 → 登录 ACR → docker build 三个镜像并 push → SSH 到 ECS 拉取并 up。
+> 流水线就是一个 yaml 文件：`.github/workflows/deploy.yml`（仓库里已放好，push 到 GitHub 后自动生效）。它做四件事：检出代码 → 登录 ACR → docker build 四个镜像并 push → SSH 到 ECS 拉取并 up。
 
 ### 7.1 了解 workflow（已写好，不用手写）
-`.github/workflows/deploy.yml` 流程：`push 到 main 触发` → `docker build -f apps/xxx/Dockerfile` 打 3 个镜像（Dockerfile 里自带 corepack + pnpm install + build，所以不用单独跑构建）→ `push 到 ACR` → `SSH 到 ECS 执行 compose pull + up`。
+`.github/workflows/deploy.yml` 流程：`push 到 main 触发` → `docker build -f apps/xxx/Dockerfile` 打 4 个镜像（Dockerfile 里自带 corepack + pnpm install + build，所以不用单独跑构建）→ `push 到 ACR` → `SSH 到 ECS 执行 compose pull + up`。
 
 > ⚠️ 海外构建机拉 Docker Hub 基础镜像（node:24-alpine、nginx）没问题，但推镜像到国内 ACR 会慢一点，属正常，能跑通。
 
@@ -241,7 +242,22 @@ MINIO_PUBLIC_URL=http://<你的ECS公网IP>:9000   # 图片对外地址
 JWT_ACCESS_SECRET=<强随机值>
 JWT_REFRESH_SECRET=<强随机值>
 PORT=3000
+
+# ---- 智能客服 customer-service ----
+# 与主库同实例、独立 schema；迁移会自动建 customer_service schema + vector 扩展
+CUSTOMER_SERVICE_DATABASE_URL="postgresql://mall:mall123@db:5432/mall?schema=customer_service"
+DEEPSEEK_API_KEY=<DeepSeek key>
+SILICONFLOW_API_KEY=<硅基流动 key，embedding + reranker>
+LANGFUSE_PUBLIC_KEY=<可选，不填跳过观测上报>
+LANGFUSE_SECRET_KEY=<可选>
+LANGFUSE_BASEURL=<可选>
+# 若 h5 与客服服务跨域部署才需要；同域走 nginx /cs 反代则不用
+CORS_ORIGINS=https://<你的域名>
 ```
+
+> ⚠️ `CUSTOMER_SERVICE_DATABASE_URL` 一定和 `DATABASE_URL` 指向同一个库、但 `schema=customer_service`。
+> 生产 db 镜像已换成 `pgvector/pgvector:pg16`（原来的 `postgres:16-alpine` 没有 vector 类型），
+> 直接复用已有 `pgdata` 卷即可，扩展由迁移创建。
 
 ### 8.2 首跑顺序
 - [ ] push 代码到 GitHub 触发 Actions 自动部署，或手动首次拉取：
@@ -251,7 +267,9 @@ export IMAGE_TAG=<git SHA>
 docker compose --env-file .env.prod -f docker-compose.prod.yml pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 ```
-> `up -d` 会按依赖顺序自动完成：起 db/redis/minio → 跑 `migrate` 迁移 → 起 server（启动时自动建 MinIO bucket）→ 起 h5/admin。**不用手动建 bucket，也不用单独跑 migrate**。
+> `up -d` 会按依赖顺序自动完成：起 db/redis/minio → 跑 `migrate`（主库）和 `customer-migrate`（客服库）迁移 → 起 server（启动时自动建 MinIO bucket）→ 起 customer-service（健康检查 `/health`）→ 起 h5/admin。**不用手动建 bucket，也不用单独跑 migrate**。
+>
+> 注意：`customer-migrate` 会先执行 `CREATE EXTENSION IF NOT EXISTS vector`，再 `prisma migrate deploy`——顺序不能反，否则历史迁移里引用 `public.vector` 类型会失败。
 
 ### 8.2.1 初始化管理员账号（首次必做）
 > `migrate deploy` 只建表、**不灌账号**。admin/operator 账号在 seed 脚本里，需手动跑一次：
@@ -261,10 +279,21 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml exec server sh -c
 ```
 > 跑完可用 `admin / admin123`（超管）、`operator / operator123`（运营）登录。seed 幂等，可重复跑。
 
+### 8.2.2 灌 FAQ 知识库（智能客服首次必做）
+> 客服的售后政策回答依赖 `faq_documents` 里的向量数据，迁移只建表不灌数据：
+```bash
+cd /srv/mall
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec customer-service \
+  sh -c "cd apps/customer-service && npx tsx prisma/seed-faq.ts"
+```
+> seed 会调用硅基流动生成 embedding，并先 `TRUNCATE` 清空 `faq_documents` 再写入 13 条内置 FAQ（可重复跑，但会覆盖表里已有的 FAQ 内容）；确认 `SILICONFLOW_API_KEY` 已配好。
+
 ### 8.3 验证
 - [ ] `docker compose ps` 所有服务 healthy/running。
 - [ ] `curl http://localhost:3000/api/home/slots` 返回 JSON。
+- [ ] `docker compose --env-file .env.prod -f docker-compose.prod.yml exec h5 wget -qO- http://customer-service:3002/health` 返回正常。
 - [ ] 浏览器访问 `http://<IP>:8080`（h5）、`http://<IP>:8081`（admin）。
+- [ ] 打开 h5 → 智能客服，发一句「退款多久到账」，确认回复是流式逐字出现（不是整段一次性蹦出，否则检查 nginx `/cs/` 的 `proxy_buffering off`）。
 - [ ] admin 登录（admin/admin123），上传一张图，确认图片能显示、DB 存的是 key。
 
 ---

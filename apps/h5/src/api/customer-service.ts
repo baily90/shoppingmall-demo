@@ -1,7 +1,5 @@
 import { getAccessToken } from './request';
-
-const SERVICE_URL =
-  (import.meta.env.VITE_CUSTOMER_SERVICE_URL as string) ?? 'http://localhost:3002';
+import { CUSTOMER_SERVICE_URL as SERVICE_URL } from '../utils/customer-service-url';
 
 function authHeaders(): Record<string, string> {
   const token = getAccessToken();

@@ -77,12 +77,25 @@ model UserProfile {
 }
 
 // 语义缓存：FAQ 问答缓存（问题向量 + 答案），命中则不调 LLM
+// question 唯一：写入用 upsert，避免同一问题重复堆积；created_at 支撑 TTL 清理
 model QaCache {
   id        Int                      @id @default(autoincrement())
-  question  String
+  question  String                   @unique
   answer    String
   embedding Unsupported("public.vector(1024)")?
   createdAt DateTime                 @default(now()) @map("created_at")
 
   @@map("qa_cache")
+}
+
+// 每日用量（成本控制）：按用户 + UTC 自然日聚合对话次数与 token
+model UserUsageDaily {
+  userId    String   @map("user_id")
+  day       DateTime @db.Date
+  requests  Int      @default(0)
+  tokens    Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@id([userId, day])
+  @@map("user_usage_daily")
 }

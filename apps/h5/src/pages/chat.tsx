@@ -57,6 +57,13 @@ function currentToolName(messages: UIMessage[]): string | null {
   return null;
 }
 
+// 错误文案：429（预算/限流）直接展示服务端原因，其余统一友好提示，不暴露供应商细节
+function friendlyError(error: Error): string {
+  const message = error.message?.trim();
+  if (message && (message.includes('今日') || message.includes('频繁'))) return message;
+  return '服务暂时不可用，请稍后重试。';
+}
+
 // 相对时间展示
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -69,8 +76,18 @@ function formatTime(iso: string): string {
 
 export default function Chat() {
   const navigate = useNavigate();
-  const { messages, sessionId, sendMessage, loading, error, stop, resetSession, switchSession } =
-    useCustomerServiceChat();
+  const {
+    messages,
+    sessionId,
+    sendMessage,
+    loading,
+    error,
+    stop,
+    regenerate,
+    clearError,
+    resetSession,
+    switchSession,
+  } = useCustomerServiceChat();
   const [input, setInput] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -243,10 +260,28 @@ export default function Chat() {
         )}
         {error && (
           <div className="chat-error">
-            [出错了] {error.message}{' '}
-            <button className="chat-stop" onClick={() => void stop()}>
-              停止
-            </button>
+            <div className="chat-error-text">{friendlyError(error)}</div>
+            <div className="chat-error-actions">
+              {loading ? (
+                <button type="button" className="chat-stop" onClick={() => void stop()}>
+                  停止
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="chat-stop"
+                  onClick={() => {
+                    clearError();
+                    void regenerate();
+                  }}
+                >
+                  重试
+                </button>
+              )}
+              <button type="button" className="chat-stop" onClick={() => clearError()}>
+                关闭
+              </button>
+            </div>
           </div>
         )}
       </div>

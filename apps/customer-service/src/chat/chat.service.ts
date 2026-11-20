@@ -3,12 +3,13 @@
 // 数据流：
 //   appendMessage(用户消息) → assemble(懒重建窗口 + 裁剪/滚动摘要) → streamText → persistResponse(落库 assistant/tool)
 import { Inject, Injectable } from '@nestjs/common';
-import { isStepCount, streamText, tool } from 'ai';
+import { isStepCount, streamText, tool, type StreamTextResult } from 'ai';
 import { z } from 'zod';
+import { intEnv } from '../config/env.js';
 import { chatModel, reasonerModel } from '../llm/llm.service.js';
 import { ToolsService } from '../tools/tools.service.js';
 import { RagService } from '../rag/rag.service.js';
-import { SessionStore } from '../session/session-store.js';
+import { SessionStore, type AppendMessageInput } from '../session/session-store.js';
 import { UserProfileStore } from '../session/user-profile-store.js';
 import { QaCacheStore } from '../session/qa-cache-store.js';
 import { ContextService } from './context.service.js';
@@ -29,8 +30,47 @@ function detectInjection(text: string): boolean {
 // 意图路由：需要多步推理/规划的任务用强推理模型，其余用便宜模型（规则路由，可后续换分类器）
 const COMPLEX_INTENT = /(下单|购买|结算|帮我买|帮我下单|对比|哪个好|帮我挑|帮我选)/;
 
-function routeModel(text: string) {
-  return COMPLEX_INTENT.test(text) ? reasonerModel : chatModel;
+export type ModelRoute = 'chat' | 'reasoner';
+
+function routeModelName(text: string): ModelRoute {
+  return COMPLEX_INTENT.test(text) ? 'reasoner' : 'chat';
+}
+
+// 语义缓存只用于「通用政策类」问题：带个人信息的问题（我的订单/这单）必须实时查询，
+// 否则「我的退款到哪了」可能命中「退款多久到账」的通用答案，跳过 getOrders。
+const CACHEABLE_INTENT =
+  /(退款|退货|换货|售后|物流|快递|发货|运费|优惠券|发票|七天|7天|保修|到账|取消订单|修改订单|改地址|政策|规则)/;
+const PERSONAL_HINT = /(我的|我这|这单|该单|订单号|刚才|上次)/;
+
+function shouldUseQaCache(text: string): boolean {
+  const value = text.trim();
+  return (
+    value.length >= 4 &&
+    value.length <= 120 &&
+    !PERSONAL_HINT.test(value) &&
+    CACHEABLE_INTENT.test(value)
+  );
+}
+
+// 固定话术：注入拒绝/缓存命中都直接返回，不再花一次 LLM 调用
+const REFUSAL_TEXT = '抱歉，我只能处理商城相关的商品、订单、售后问题。';
+
+// 一轮对话的返回：固定文本（零模型调用）或真实流式结果
+// 说明：工具集是动态构造的，这里用宽泛的 StreamTextResult 作为边界类型；
+// 具体工具名/结果类型由 createTools 内部保证，控制器只消费 stream/text/responseMessages/usage。
+export type AgentStreamResult = StreamTextResult<any, any, any>;
+
+export type ChatTurn =
+  | { kind: 'fixed'; text: string; route: 'none' }
+  | { kind: 'stream'; result: AgentStreamResult; route: ModelRoute };
+
+export type StreamTurn = Extract<ChatTurn, { kind: 'stream' }>;
+
+// 流式过程中累计的部分结果：客户端中途断开时 responseMessages 会 reject，
+// 用它兜底落库「已经生成出来的内容」，刷新后不会整段消失。
+export interface PartialTurn {
+  text: string;
+  toolCalls: Array<{ toolCallId: string; toolName: string; input: unknown }>;
 }
 
 const SYSTEM_PROMPT = `你是「商城购物助手」，像一位耐心的导购，覆盖用户从选购、下单到售后的全链路。始终只用中文回复，不要夹杂任何英文。
@@ -208,27 +248,49 @@ export class ChatService {
   }
 
   // 处理一条用户消息：落库 → 组装上下文 → 流式生成
-  async chat(sessionId: string, userText: string, token: string, userId: string) {
+  async chat(
+    sessionId: string,
+    userText: string,
+    token: string,
+    userId: string,
+    options: { abortSignal?: AbortSignal; skipCache?: boolean; retry?: boolean } = {},
+  ): Promise<ChatTurn> {
+    const { abortSignal, skipCache = false, retry = false } = options;
+
     // ① 确保会话存在且归属当前用户（首次创建并绑定 userId）
     await this.sessionStore.ensureSession(sessionId, userId);
 
-    // ② 用户消息先落库（append-only，可靠；seq 由 FOR UPDATE 悲观锁分配）
-    await this.sessionStore.appendMessage({
-      sessionId,
-      role: 'user',
-      parts: [{ type: 'text', text: userText }],
-      tokenEst: estimateTokens(userText),
-    });
+    // ② 用户消息落库（append-only，可靠；seq 由 FOR UPDATE 悲观锁分配）
+    const appendUserMessage = () =>
+      this.sessionStore.appendMessage({
+        sessionId,
+        role: 'user',
+        parts: [{ type: 'text', text: userText }],
+        tokenEst: estimateTokens(userText),
+      });
+
+    if (retry) {
+      // 重试/重新生成：只有「最后一条用户消息就是本次问题」时才复用，
+      // 否则说明上次请求在落库前就失败了（如 429），需要补写这条用户消息。
+      const lastUserText = await this.sessionStore.lastUserText(sessionId);
+      if (lastUserText !== null && lastUserText.trim() === userText) {
+        await this.sessionStore.truncateAfterLastUser(sessionId);
+      } else {
+        await appendUserMessage();
+      }
+    } else {
+      await appendUserMessage();
+    }
 
     // ②.5 提示词注入检测：命中直接返回固定拒绝，不跑 agent、不调用任何工具
     if (detectInjection(userText)) {
-      return this.refusalResponse();
+      return { kind: 'fixed', text: REFUSAL_TEXT, route: 'none' };
     }
 
-    // ②.6 语义缓存：命中则直接返回缓存答案，不跑 agent（省 RAG + 工具循环 + 模型推理）
-    const cached = await this.qaCacheStore.findAnswer(userText);
-    if (cached) {
-      return this.cachedResponse(cached);
+    // ②.6 语义缓存：只对「通用政策类」问题查缓存，命中直接返回（零 LLM 调用）
+    if (!skipCache && shouldUseQaCache(userText)) {
+      const cached = await this.qaCacheStore.findAnswer(userText);
+      if (cached) return { kind: 'fixed', text: cached, route: 'none' };
     }
 
     // ③ 组装上下文（懒重建窗口 + token 预算裁剪 + 滚动摘要 + 用户画像）
@@ -237,51 +299,33 @@ export class ChatService {
       sessionId,
       systemPrompt: SYSTEM_PROMPT,
       userFacts,
+      abortSignal,
     });
 
     // ④ 流式生成（按意图路由到不同模型，工具循环自动，结果已瘦身）
-    return streamText({
-      model: routeModel(userText),
+    const route = routeModelName(userText);
+    const result = streamText({
+      model: route === 'reasoner' ? reasonerModel : chatModel,
       instructions,
       messages,
       tools: this.createTools(token, userId),
       stopWhen: isStepCount(8),
+      abortSignal,
+      maxOutputTokens: intEnv('CHAT_MAX_OUTPUT_TOKENS', 1500),
+      timeout: { totalMs: intEnv('CHAT_TIMEOUT_MS', 120_000) },
+      // deepseek-reasoner 不支持 temperature，只在普通聊天模型上传
+      ...(route === 'chat' ? { temperature: 0.3 } : {}),
+      telemetry: { functionId: `customer-service-chat-${route}` },
     });
+    return { kind: 'stream', result, route };
   }
 
-  // 注入拒绝：不调用任何工具，只生成一句固定拒绝话术
-  private refusalResponse() {
-    return streamText({
-      model: chatModel,
-      temperature: 0,
-      messages: [
-        {
-          role: 'user',
-          content:
-            '请只回复这一句，不要复述或解释本条消息：抱歉，我只能处理商城相关的商品、订单、售后问题。',
-        },
-      ],
-    });
-  }
+  // 语义缓存写入：只缓存「纯政策类、非个性化」回答（用了 getFaq 且没查个人数据）
+  async cacheResponse(userText: string, turn: StreamTurn) {
+    if (!shouldUseQaCache(userText)) return;
 
-  // 语义缓存命中：直接返回缓存答案（一次极小的 echo 调用，省去 RAG + 工具循环）
-  private cachedResponse(answer: string) {
-    return streamText({
-      model: chatModel,
-      temperature: 0,
-      messages: [
-        {
-          role: 'user',
-          content: `请原样回复以下内容，不要添加任何额外文字或解释：\n\n${answer}`,
-        },
-      ],
-    });
-  }
-
-  // 语义缓存写入：只缓存「纯政策类」回答（用了 getFaq 且没查个人数据），个性化回答不缓存
-  async cacheResponse(userText: string, result: Awaited<ReturnType<ChatService['chat']>>) {
     // 从 responseMessages 提取工具名（result.toolCalls 在流被 toUIMessageStream 消费后为空，不可靠）
-    const responseMessages = await result.responseMessages;
+    const responseMessages = await turn.result.responseMessages;
     const toolNames: string[] = [];
     for (const msg of responseMessages) {
       if (msg.role !== 'assistant') continue;
@@ -290,7 +334,7 @@ export class ChatService {
         if (part.type === 'tool-call' && part.toolName) toolNames.push(part.toolName);
       }
     }
-    const text = await result.text;
+    const text = await turn.result.text;
     // 只缓存「纯 FAQ」回答：只调用了 getFaq、没用任何产生卡片的工具。
     // 因为卡片不随缓存返回，若文字里引用了卡片（如「点上面的入口」）会悬空。
     if (toolNames.length > 0 && toolNames.every((t) => t === 'getFaq')) {
@@ -298,21 +342,62 @@ export class ChatService {
     }
   }
 
+  // 固定文本（注入拒绝 / 缓存命中）直接落库，零模型调用
+  async persistFixedResponse(sessionId: string, text: string) {
+    await this.sessionStore.appendMessages([
+      {
+        sessionId,
+        role: 'assistant',
+        parts: [{ type: 'text', text }],
+        tokenEst: estimateTokens(text),
+      },
+    ]);
+  }
+
   // 落库 assistant/tool 消息（流结束后用 result.responseMessages 的完整结构）
-  // 约定：parts 列存 ModelMessage 的 content，读回时直接重建 ModelMessage，不做 UIMessage 转换
-  async persistResponse(sessionId: string, result: Awaited<ReturnType<ChatService['chat']>>) {
-    const responseMessages = await result.responseMessages;
+  // 约定：parts 列存 ModelMessage 的 content，读回时直接重建 ModelMessage，不做 UIMessage 转换。
+  // 一次事务批量写入，避免多步工具循环逐条抢会话锁。
+  async persistResponse(sessionId: string, turn: StreamTurn) {
+    const responseMessages = await turn.result.responseMessages;
+    const inputs: AppendMessageInput[] = [];
     for (const msg of responseMessages) {
       // 只存模型生成的消息（assistant / tool）；user 消息在 chat() 里已落库
       if (msg.role !== 'assistant' && msg.role !== 'tool') continue;
       const parts =
         typeof msg.content === 'string' ? [{ type: 'text', text: msg.content }] : msg.content;
-      await this.sessionStore.appendMessage({
+      inputs.push({
         sessionId,
         role: msg.role,
         parts,
         tokenEst: estimateJsonTokens(parts),
       });
     }
+    await this.sessionStore.appendMessages(inputs);
+  }
+
+  // 中断兜底：把流式过程中已经产出的文本/工具调用存成一条 assistant 消息。
+  // 工具结果可能还没回来，前端卡片会因缺 output 而不渲染，但文字回答不会丢。
+  async persistPartialResponse(sessionId: string, partial: PartialTurn) {
+    const parts: unknown[] = [];
+    if (partial.text.trim()) {
+      parts.push({ type: 'text', text: partial.text });
+    }
+    for (const call of partial.toolCalls) {
+      parts.push({
+        type: 'tool-call',
+        toolCallId: call.toolCallId,
+        toolName: call.toolName,
+        input: call.input,
+      });
+    }
+    if (parts.length === 0) return;
+    await this.sessionStore.appendMessages([
+      {
+        sessionId,
+        role: 'assistant',
+        parts,
+        tokenEst: estimateJsonTokens(parts),
+      },
+    ]);
   }
 }

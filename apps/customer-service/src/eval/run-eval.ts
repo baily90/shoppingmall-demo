@@ -140,13 +140,21 @@ async function main() {
     task: async ({ input }) => {
       // 每条用例独立会话，避免上下文跨用例串扰；政策类用例只用 getFaq，token 传空即可
       const sessionId = `eval-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const res = await chatService.chat(sessionId, String(input), '', 'eval-user');
-      const [text, toolCalls] = await Promise.all([res.text, res.toolCalls]);
+      // skipCache：评测必须走真实 agent，不能命中线上语义缓存
+      const turn = await chatService.chat(sessionId, String(input), '', 'eval-user', {
+        skipCache: true,
+      });
+      if (turn.kind === 'fixed') {
+        toolCallsByInput.set(String(input), []);
+        return turn.text;
+      }
+      // 等流式结束，拿完整回答 + 实际调用过的工具名
+      const [text, toolCalls] = await Promise.all([turn.result.text, turn.result.toolCalls]);
       toolCallsByInput.set(
         String(input),
         toolCalls.map((t) => t.toolName),
       );
-      return text; // 等流式结束，拿完整回答
+      return text;
     },
     evaluators: [
       correctnessEvaluator,

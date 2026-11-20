@@ -8,6 +8,11 @@ import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/index.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
+// 单次 hydration 最多回填的消息数（长会话不一次性全量下发）
+const DEFAULT_HISTORY_LIMIT = 200;
+const MAX_HISTORY_LIMIT = 500;
+const DEFAULT_SESSION_LIST_LIMIT = 50;
+
 export type MessageRole = 'user' | 'assistant' | 'tool';
 
 export interface AppendMessageInput {
@@ -47,11 +52,12 @@ export class SessionStore {
     return this.prisma.chatSession.findUnique({ where: { id: sessionId } });
   }
 
-  // 列出当前用户的所有会话（标题取首条用户消息，按更新时间倒序）
-  async listSessions(userId: string) {
+  // 列出当前用户的会话（标题取首条用户消息，按更新时间倒序；默认最多 50 条）
+  async listSessions(userId: string, limit = DEFAULT_SESSION_LIST_LIMIT) {
     const sessions = await this.prisma.chatSession.findMany({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
+      take: Math.min(Math.max(limit, 1), DEFAULT_SESSION_LIST_LIMIT * 4),
       include: {
         messages: {
           where: { role: 'user' },
@@ -78,10 +84,15 @@ export class SessionStore {
   }
 
   // —— 消息（append-only）——
-  // 追加一条消息：事务内 FOR UPDATE 锁 session 行，保证同会话 seq 唯一且单调
-  // 调用方需先确保 session 存在（否则外键约束失败）
-  async appendMessage(input: AppendMessageInput) {
-    const { sessionId, role, parts, tokenEst = 0 } = input;
+  // 批量追加：一次事务只锁一次 session 行、只查一次 MAX(seq)，避免一轮对话 8 步就抢 9 次锁。
+  // 调用方需先确保 session 存在（否则外键约束失败）。
+  async appendMessages(inputs: AppendMessageInput[]): Promise<number> {
+    if (inputs.length === 0) return 0;
+    const sessionId = inputs[0].sessionId;
+    if (inputs.some((input) => input.sessionId !== sessionId)) {
+      throw new Error('appendMessages 只支持同一会话的消息');
+    }
+
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM customer_service.chat_sessions WHERE id = ${sessionId} FOR UPDATE`;
       const rows = await tx.$queryRaw<Array<{ max: number }>>`
@@ -89,32 +100,78 @@ export class SessionStore {
         FROM customer_service.chat_messages
         WHERE session_id = ${sessionId}
       `;
-      const seq = Number(rows[0]?.max ?? 0) + 1;
-      return tx.chatMessage.create({
-        data: {
-          sessionId,
-          seq,
-          role,
-          parts: parts as Prisma.InputJsonValue,
-          tokenEst,
-        },
+      let seq = Number(rows[0]?.max ?? 0);
+      const data = inputs.map((input) => ({
+        sessionId,
+        seq: ++seq,
+        role: input.role,
+        parts: input.parts as Prisma.InputJsonValue,
+        tokenEst: input.tokenEst ?? 0,
+      }));
+      await tx.chatMessage.createMany({ data });
+      return data.length;
+    });
+  }
+
+  async appendMessage(input: AppendMessageInput) {
+    return this.appendMessages([input]);
+  }
+
+  // 最后一条用户消息的完整文本（重试时用来判断上次是否已落库，避免重复写入或误删上一轮回答）
+  async lastUserText(sessionId: string): Promise<string | null> {
+    const row = await this.prisma.chatMessage.findFirst({
+      where: { sessionId, role: 'user' },
+      orderBy: { seq: 'desc' },
+      select: { parts: true },
+    });
+    if (!row) return null;
+    const parts = Array.isArray(row.parts) ? (row.parts as Array<Record<string, unknown>>) : [];
+    const text = parts
+      .filter((p) => p.type === 'text' && typeof p.text === 'string')
+      .map((p) => String(p.text))
+      .join('');
+    return text || null;
+  }
+
+  // 重新生成：删掉最后一条用户消息之后的所有消息（上一次失败/中断留下的半截 assistant/tool），
+  // 用户消息本身保留，避免重试时同一个问题在历史里出现两次。
+  async truncateAfterLastUser(sessionId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM customer_service.chat_sessions WHERE id = ${sessionId} FOR UPDATE`;
+      const rows = await tx.$queryRaw<Array<{ seq: number | null }>>`
+        SELECT MAX(seq) AS seq
+        FROM customer_service.chat_messages
+        WHERE session_id = ${sessionId} AND role = 'user'
+      `;
+      const seq = rows[0]?.seq;
+      if (seq == null) return;
+      await tx.chatMessage.deleteMany({
+        where: { sessionId, seq: { gt: Number(seq) } },
       });
     });
   }
 
-  // hydration：拉全部消息（按 seq 升序），前端挂载时回填
-  async listMessages(sessionId: string) {
-    return this.prisma.chatMessage.findMany({
+  // hydration：按 seq 升序拉消息；传 limit 时只取最近 limit 条（长会话不整段下发）
+  async listMessages(sessionId: string, limit?: number) {
+    if (!limit) {
+      return this.prisma.chatMessage.findMany({
+        where: { sessionId },
+        orderBy: { seq: 'asc' },
+      });
+    }
+    const rows = await this.prisma.chatMessage.findMany({
       where: { sessionId },
-      orderBy: { seq: 'asc' },
+      orderBy: { seq: 'desc' },
+      take: Math.min(Math.max(limit, 1), MAX_HISTORY_LIMIT),
     });
+    return rows.reverse();
   }
 
   // hydration（给前端）：把 tool-result 合并回 assistant 的 tool-call，转成 UIMessage 结构。
   // 存储层仍是 ModelMessage 结构（上下文组装要用），此处只做「读侧投影」，
   // 让前端能据此渲染文本气泡 + 商品/订单卡片（工具输出随历史一起回填，刷新不丢）。
-  async listMessagesForUI(sessionId: string) {
-    const rows = await this.listMessages(sessionId);
+  async listMessagesForUI(sessionId: string, limit = DEFAULT_HISTORY_LIMIT) {
+    const rows = await this.listMessages(sessionId, limit);
 
     // tool-result 按 toolCallId 索引（tool 消息存的是 ModelMessage 的 tool-result content）
     const toolOutputs = new Map<string, unknown>();
@@ -171,19 +228,29 @@ export class SessionStore {
   }
 
   // 确保会话存在且归属当前用户 + 状态行存在：
-  // 首次使用时创建并绑定 userId；存在但属于他人则拒绝（防止跨用户访问会话）
+  // 首次使用时创建并绑定 userId；存在但属于他人则拒绝（防止跨用户访问会话）。
+  // 并发首条消息可能同时 create，撞唯一键后回查一次，避免 500。
   async ensureSession(sessionId: string, userId: string) {
-    const existing = await this.prisma.chatSession.findUnique({ where: { id: sessionId } });
+    let existing = await this.prisma.chatSession.findUnique({ where: { id: sessionId } });
     if (!existing) {
-      await this.prisma.chatSession.create({ data: { id: sessionId, userId } });
-    } else if (existing.userId !== userId) {
+      try {
+        existing = await this.prisma.chatSession.create({ data: { id: sessionId, userId } });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+          existing = await this.prisma.chatSession.findUnique({ where: { id: sessionId } });
+        } else {
+          throw e;
+        }
+      }
+    }
+    if (existing && existing.userId !== userId) {
       throw new ForbiddenException('无权访问该会话');
     }
-    // 状态行（summary / 水位线 / slots）
-    await this.prisma.chatSessionState.upsert({
-      where: { sessionId },
-      create: { sessionId },
-      update: {},
+
+    // 状态行（summary / 水位线 / slots）：createMany + skipDuplicates 天然幂等，避免并发 upsert 撞主键
+    await this.prisma.chatSessionState.createMany({
+      data: [{ sessionId }],
+      skipDuplicates: true,
     });
   }
 

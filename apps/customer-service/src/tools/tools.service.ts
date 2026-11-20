@@ -3,7 +3,8 @@
 // 瘦身原则：只返回客服回答所需的「用户可感知」字段，金额统一分→元，
 // 图片 URL、内部 id、时间戳原文等对模型无用的字段一律丢弃，
 // 避免把整页原始响应塞进上下文、挤爆 token 预算。
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { intEnv } from '../config/env.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 // 订单状态 → 可读文案（与 mall-server 的 OrderStatus 对齐）
@@ -131,9 +132,27 @@ const ALLOWED_TABLES = new Set([
 const FORBIDDEN_KEYWORDS =
   /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|vacuum|copy|call|merge|replace|into|execute|prepare|listen|notify|load|begin|commit|rollback|set|reset)\b/i;
 
-/** 校验只读查询：单条 SELECT、无危险关键字、只查白名单表。返回错误信息，null 表示通过。 */
+// 危险函数：只靠表名白名单拦不住 SELECT pg_sleep(...) / pg_read_file(...) 这类调用。
+// 即使数据库账号有权限，也不允许模型触发这些副作用函数。
+const FORBIDDEN_FUNCTIONS =
+  /\b(pg_sleep|pg_read_file|pg_read_binary_file|pg_ls_dir|pg_stat_file|pg_current_logfile|lo_import|lo_export|dblink|set_config|current_setting|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_promote|pg_switch_wal|pg_create_restore_point|pg_drop_replication_slot|pg_create_physical_replication_slot)\b/i;
+
+// 查询资源上限（防止一条 SQL 把整张表读进内存 / 长时间占用连接）
+const DB_QUERY_MAX_ROWS = intEnv('DB_QUERY_MAX_ROWS', 50);
+const DB_QUERY_TIMEOUT_MS = intEnv('DB_QUERY_TIMEOUT_MS', 3000);
+const DB_QUERY_MAX_SQL_LENGTH = intEnv('DB_QUERY_MAX_SQL_LENGTH', 4000);
+// 单字段最大长度：商品副标题/评价内容可能很长，截断后再喂给模型，避免挤爆上下文
+const DB_QUERY_MAX_FIELD_LENGTH = intEnv('DB_QUERY_MAX_FIELD_LENGTH', 300);
+
+/** 校验只读查询：单条 SELECT、无危险关键字/函数、只查白名单表。返回错误信息，null 表示通过。 */
 function validateReadQuery(sql: string): string | null {
-  const stmts = sql
+  const normalized = sql.trim();
+  if (!normalized) return 'SQL 不能为空';
+  if (normalized.length > DB_QUERY_MAX_SQL_LENGTH) return 'SQL 过长';
+  // 注释可能被用来隐藏关键字，直接拒绝（模型生成的查询不需要注释）
+  if (normalized.includes('--') || normalized.includes('/*')) return 'SQL 不允许包含注释';
+
+  const stmts = normalized
     .split(';')
     .map((s) => s.trim())
     .filter(Boolean);
@@ -141,6 +160,7 @@ function validateReadQuery(sql: string): string | null {
   const stmt = stmts[0];
   if (!/^select\b/i.test(stmt) && !/^with\b/i.test(stmt)) return '仅支持 SELECT 查询';
   if (FORBIDDEN_KEYWORDS.test(stmt)) return 'SQL 包含不允许的关键字';
+  if (FORBIDDEN_FUNCTIONS.test(stmt)) return 'SQL 包含不允许的函数';
 
   // 表白名单：提取 from / join 后的表名（忽略 public. 前缀），必须都在白名单内
   const tableRe = /(?:from|join)\s+(?:public\.)?["']?([a-z_][a-z0-9_]*)["']?/gi;
@@ -153,27 +173,69 @@ function validateReadQuery(sql: string): string | null {
   return null;
 }
 
+// 结果值瘦身：BigInt/日期转成可 JSON 序列化的值，长文本截断
+function normalizeCell(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : value.toString();
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string' && value.length > DB_QUERY_MAX_FIELD_LENGTH) {
+    return `${value.slice(0, DB_QUERY_MAX_FIELD_LENGTH)}…`;
+  }
+  return value;
+}
+
+// 手机号脱敏：保留前 3 后 4（长度不足时全量打码）
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 11) return phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
+  if (digits.length > 4)
+    return phone.replace(/\d/g, (d, i) => (i < 3 || i >= digits.length - 4 ? d : '*'));
+  return phone.replace(/\d/g, '*');
+}
+
 @Injectable()
 export class ToolsService {
+  private readonly logger = new Logger(ToolsService.name);
   private readonly baseUrl = process.env.MALL_SERVER_URL ?? 'http://localhost:3000/api';
 
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  // 只读查库：执行白名单校验后的 SELECT，返回结果集（最多 50 行），供模型总结回答
+  // 只读查库：执行白名单校验后的 SELECT，返回结果集（最多 DB_QUERY_MAX_ROWS 行），供模型总结回答。
+  //
+  // 三重资源边界：
+  //   1. 外层包一层 LIMIT：即使模型写的 SQL 没有 LIMIT，也最多只取 N+1 行；
+  //   2. 事务设为 READ ONLY：数据库层面兜底拒绝写操作；
+  //   3. statement_timeout：单条查询超时自动取消，避免 pg_sleep/大表扫描拖住连接。
   async dbQuery(sql: string) {
     const error = validateReadQuery(sql);
     if (error) return { error, hint: '换个查询方式或改用 getProducts/getOrders 等工具' };
 
+    // 去掉模型可能带上的结尾分号，否则包进子查询会变成语法错误
+    const cleanedSql = sql.trim().replace(/;+\s*$/, '');
+    const wrappedSql = `SELECT * FROM (\n${cleanedSql}\n) AS __agent_query LIMIT ${DB_QUERY_MAX_ROWS + 1}`;
     try {
-      const rows = (await this.prisma.$queryRawUnsafe(sql)) as unknown as Array<
-        Record<string, unknown>
-      >;
-      const list = Array.isArray(rows) ? rows.slice(0, 50) : [];
+      const raw = await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
+        await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = ${DB_QUERY_TIMEOUT_MS}`);
+        return tx.$queryRawUnsafe(wrappedSql);
+      });
+      const all = Array.isArray(raw) ? (raw as Array<Record<string, unknown>>) : [];
+      const truncated = all.length > DB_QUERY_MAX_ROWS;
+      const list = all
+        .slice(0, DB_QUERY_MAX_ROWS)
+        .map((row) =>
+          Object.fromEntries(
+            Object.entries(row).map(([key, value]) => [key, normalizeCell(value)]),
+          ),
+        );
       const columns = list.length > 0 ? Object.keys(list[0]) : [];
-      return { columns, rows: list, rowCount: list.length };
+      return { columns, rows: list, rowCount: list.length, truncated };
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.warn(`db_query 执行失败：${message}`);
       return {
-        error: `查询失败：${e instanceof Error ? e.message : e}`,
+        error: `查询失败：${message}`,
         hint: '简化 SQL 或换个查询条件重试',
       };
     }
@@ -186,6 +248,8 @@ export class ToolsService {
     params.set('page', '1');
     params.set('pageSize', '50');
     if (args.status != null) params.set('status', String(args.status));
+    // 订单号交给服务端过滤（否则只能在前 50 单里本地匹配，订单多的用户会查不到）
+    if (args.orderNo) params.set('keyword', args.orderNo);
 
     let body: { code: number; data: unknown; message: string };
     try {
@@ -300,10 +364,11 @@ export class ToolsService {
     if (body.code !== 0) return { error: body.message, addresses: [] };
 
     const list = (body.data as AddressItem[] | null) ?? [];
+    // 手机号脱敏后再进模型上下文/聊天记录：下单只依赖 address.id，不需要完整号码
     const addresses = list.map((a) => ({
       id: a.id,
       receiverName: a.receiverName,
-      receiverPhone: a.receiverPhone,
+      receiverPhone: maskPhone(a.receiverPhone),
       fullAddress: `${a.province}${a.city}${a.district}${a.detail}`,
       isDefault: a.isDefault,
     }));

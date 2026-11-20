@@ -2,10 +2,7 @@ import { useEffect, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { getAccessToken } from '../api/request';
-
-// 客服服务地址（Vite 环境变量可覆盖）
-const SERVICE_URL =
-  (import.meta.env.VITE_CUSTOMER_SERVICE_URL as string) ?? 'http://localhost:3002';
+import { CUSTOMER_SERVICE_URL } from '../utils/customer-service-url';
 
 // 本地持久化的会话 id：刷新后仍用同一会话，历史从服务端 hydration 拉回
 const SESSION_KEY = 'mall_cs_session_id';
@@ -35,48 +32,62 @@ function getOrCreateSessionId(): string {
 export function useCustomerServiceChat() {
   const [sessionId, setSessionId] = useState(() => getOrCreateSessionId());
 
-  const { messages, sendMessage, status, error, stop, setMessages } = useChat({
-    id: sessionId,
-    transport: new DefaultChatTransport({
-      api: `${SERVICE_URL}/chat`,
-      headers: (): Record<string, string> => {
-        const token = getAccessToken();
-        return token ? { Authorization: `Bearer ${token}` } : {};
-      },
-      // 服务端是有状态会话：只传 sessionId + 最新一条用户文本，历史全在服务端
-      prepareSendMessagesRequest: ({ id, messages: msgs }) => {
-        const last = msgs[msgs.length - 1];
-        const text = last ? messageText(last.parts) : '';
-        return { body: { sessionId: id, text } };
-      },
-    }),
-  });
+  const { messages, sendMessage, regenerate, clearError, status, error, stop, setMessages } =
+    useChat({
+      id: sessionId,
+      transport: new DefaultChatTransport({
+        api: `${CUSTOMER_SERVICE_URL}/chat`,
+        headers: (): Record<string, string> => {
+          const token = getAccessToken();
+          return token ? { Authorization: `Bearer ${token}` } : {};
+        },
+        // 服务端是有状态会话：只传 sessionId + 最新一条用户文本，历史全在服务端。
+        // regenerate 时取「最后一条用户消息」，并告诉服务端这是重试：
+        // 服务端会复用已落库的用户消息、清掉上次失败留下的半截回答，避免重复问句。
+        prepareSendMessagesRequest: ({ id, messages: msgs, trigger }) => {
+          let lastUser: UIMessage | undefined;
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === 'user') {
+              lastUser = msgs[i];
+              break;
+            }
+          }
+          return {
+            body: {
+              sessionId: id,
+              text: lastUser ? messageText(lastUser.parts) : '',
+              retry: trigger === 'regenerate-message',
+            },
+          };
+        },
+      }),
+    });
 
   const loading = status === 'submitted' || status === 'streaming';
 
-  // sessionId 变化时 hydration：拉取该会话的服务端历史回填
+  // sessionId 变化时 hydration：拉取该会话的服务端历史回填。
+  // 用 updater 形式且只在本地还没有消息时回填，避免 hydration 请求慢于用户首次发送时覆盖新消息。
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const token = getAccessToken();
         const res = await fetch(
-          `${SERVICE_URL}/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+          `${CUSTOMER_SERVICE_URL}/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
           { headers: token ? { Authorization: `Bearer ${token}` } : {} },
         );
         if (!res.ok || cancelled) return;
         const data = (await res.json()) as Array<{ id: string; role: string; parts: unknown }>;
         if (cancelled) return;
         // 过滤 tool 中间消息（UIMessage 无 tool role，且工具步骤不展示）
-        setMessages(
-          data
-            .filter((m) => m.role === 'user' || m.role === 'assistant')
-            .map((m) => ({
-              id: m.id,
-              role: m.role as UIMessage['role'],
-              parts: m.parts as UIMessage['parts'],
-            })),
-        );
+        const hydrated = data
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .map((m) => ({
+            id: m.id,
+            role: m.role as UIMessage['role'],
+            parts: m.parts as UIMessage['parts'],
+          }));
+        setMessages((prev) => (prev.length === 0 ? hydrated : prev));
       } catch {
         // 历史拉取失败不阻塞使用（新消息仍可发）
       }
@@ -86,8 +97,10 @@ export function useCustomerServiceChat() {
     };
   }, [sessionId, setMessages]);
 
-  // 新会话：生成新 id + 清空消息
+  // 新会话：先停掉进行中的生成，再生成新 id + 清空消息
   const resetSession = () => {
+    stop();
+    clearError();
     const newId = crypto.randomUUID();
     localStorage.setItem(SESSION_KEY, newId);
     setMessages([]);
@@ -96,10 +109,23 @@ export function useCustomerServiceChat() {
 
   // 切换到某个历史会话
   const switchSession = (id: string) => {
+    stop();
+    clearError();
     localStorage.setItem(SESSION_KEY, id);
     setMessages([]);
     setSessionId(id);
   };
 
-  return { messages, sessionId, sendMessage, loading, error, stop, resetSession, switchSession };
+  return {
+    messages,
+    sessionId,
+    sendMessage,
+    regenerate,
+    clearError,
+    loading,
+    error,
+    stop,
+    resetSession,
+    switchSession,
+  };
 }

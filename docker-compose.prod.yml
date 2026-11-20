@@ -1,4 +1,4 @@
-# 生产编排（自托管基线：PostgreSQL + Redis + MinIO + 三端应用）
+# 生产编排（自托管基线：PostgreSQL(pgvector) + Redis + MinIO + 四端应用）
 # 镜像由 CI（GitHub Actions）构建后 push 到 ACR，这里只 pull、不 build。
 # 运行：export IMAGE_TAG=<gitSHA> && docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 # 上云可整体替换成 RDS / 云 Redis(Tair) / OSS（存储层 S3 兼容，换 OSS 只改 MINIO_* + 换一个 StorageService 实现）
@@ -39,11 +39,57 @@ services:
       retries: 5
       start_period: 30s
 
+  # 客服服务迁移：先建 vector 扩展（init_faq 迁移里用了 public.vector 类型），再 migrate deploy
+  customer-migrate:
+    image: ${REGISTRY}/mall-customer-service:${IMAGE_TAG:-latest}
+    command: >
+      sh -c "cd apps/customer-service &&
+      npx prisma db execute --file prisma/enable-pgvector.sql --schema prisma/schema.prisma &&
+      npx prisma migrate deploy"
+    env_file: .env.prod
+    environment:
+      DATABASE_URL: ${CUSTOMER_SERVICE_DATABASE_URL}
+    restart: 'no'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  customer-service:
+    image: ${REGISTRY}/mall-customer-service:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env.prod
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      # 客服库与主库同实例不同 schema（customer_service）
+      DATABASE_URL: ${CUSTOMER_SERVICE_DATABASE_URL}
+      # 容器内访问 server 走服务名，而不是 .env.prod 里的 localhost
+      MALL_SERVER_URL: http://server:3000/api
+    depends_on:
+      customer-migrate:
+        condition: service_completed_successfully
+      server:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   h5:
     image: ${REGISTRY}/mall-h5:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - '8080:80'
+    depends_on:
+      - customer-service
 
   admin:
     image: ${REGISTRY}/mall-admin:${IMAGE_TAG:-latest}
@@ -52,7 +98,8 @@ services:
       - '8081:80'
 
   db:
-    image: postgres:16-alpine
+    # 必须是带 pgvector 的镜像（客服服务 FAQ/语义缓存依赖 vector 类型与 HNSW 索引）
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mall}

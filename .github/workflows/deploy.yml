@@ -1,5 +1,5 @@
 # GitHub Actions 构建 + 部署到阿里云 ECS
-# 触发：push 到 main → 构建 3 个镜像并推 ACR → SSH 到 ECS 拉取并 up
+# 触发：push 到 main → 构建 4 个镜像（server/h5/admin/customer-service）并推 ACR → SSH 到 ECS 拉取并 up
 name: build-and-deploy
 
 on:
@@ -41,6 +41,11 @@ jobs:
         run: |
           docker build -f apps/admin/Dockerfile -t ${{ env.REGISTRY }}/mall-admin:${{ env.IMAGE_TAG }} .
           docker push ${{ env.REGISTRY }}/mall-admin:${{ env.IMAGE_TAG }}
+
+      - name: 构建并推送 customer-service
+        run: |
+          docker build -f apps/customer-service/Dockerfile -t ${{ env.REGISTRY }}/mall-customer-service:${{ env.IMAGE_TAG }} .
+          docker push ${{ env.REGISTRY }}/mall-customer-service:${{ env.IMAGE_TAG }}
 
       - name: 部署到 ECS
         uses: appleboy/ssh-action@v1

@@ -427,6 +427,8 @@ export class OrderService {
     const pageSize = query.pageSize ?? 10;
     const where: Prisma.OrderWhereInput = {
       userId,
+      // keyword 用于订单号搜索（用户端列表也要支持，客服按订单号查单依赖它）
+      ...(query.keyword ? { orderNo: { contains: query.keyword } } : {}),
       ...(query.status !== undefined ? { status: query.status } : {}),
       ...(query.refundActive !== undefined
         ? {
