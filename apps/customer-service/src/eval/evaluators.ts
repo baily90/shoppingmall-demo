@@ -6,7 +6,7 @@ import { chatModel } from '../llm/llm.service.js';
 
 // ① LLM 裁判分：准确性（1-5 分）
 // 注意：这里裁判和 agent 用同一个模型（deepseek-chat），存在"自我偏见"风险。
-// 生产环境建议用更强的模型当裁判，或先人工校准（见第 21 章 LLM-as-judge 的偏见部分）。
+// 生产环境建议用更强的模型当裁判，或先人工校准。
 export async function correctnessEvaluator(params: {
   input: unknown;
   output: unknown;
